@@ -1,0 +1,68 @@
+version: "3.9"
+
+networks:
+  mynet:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 172.25.0.0/16
+
+
+services:
+  www:
+    build: .
+    restart: always
+    container_name: applications_www
+    ports:
+      - '80:80'
+      - "443:443"
+      - "8000:8000"
+    volumes:
+      - .:/var/www/html
+    links:
+       - postgres:postgres
+    networks:
+        mynet:
+            ipv4_address: 172.25.0.2
+
+  postgres:
+    image: postgres:15
+    restart: always
+    container_name: applications_db
+    ports:
+        - '5432:5432'
+    environment:
+        POSTGRES_DB: applications
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+    volumes:
+        - db_applications_data:/var/lib/postgresql/data
+    networks:
+        mynet:
+            ipv4_address: 172.25.0.3
+
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/var/www/html
+    links:
+       - postgres:postgres
+    networks:
+        mynet:
+            ipv4_address: 172.25.0.4
+
+  comporser:
+    image: composer:latest
+    container_name: applications_composer
+    volumes:
+      - .:/var/www/html
+    working_dir: /var/www/html
+    depends_on:
+      - postgres
+      - php
+
+    
+volumes:
+  db_applications_data:
