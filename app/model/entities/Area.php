@@ -1,12 +1,11 @@
 <?php
 
-namespace entities;
 
 use Adianti\Database\TRecord;
 
 class Area extends TRecord
 {
-    const TABLENAME = 'area';
+    const TABLENAME = 'cad_area';
     const PRIMARYKEY = 'area_id';
     const IDPOLICY = 'max';
 
@@ -14,7 +13,6 @@ class Area extends TRecord
     {
         parent::__construct($id, $callObjectLoad);
         parent::addAttribute('descricao');
-        parent::addAttribute('complemento');
         parent::addAttribute('ativo');
     }
 }

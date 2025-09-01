@@ -1,4 +1,17 @@
 <menu>
+    <menuitem label="Cadastros">
+        <icon>far:address-card fa-fw</icon>
+        <menu>
+            <menuitem label="Área">
+                <icon>far:map fa-fw</icon>
+                <action>AreaList</action>
+            </menuitem>
+            <menuitem label="Gerente">
+                <icon>fas:user-tie fa-fw</icon>
+                <action>GerenteList</action>
+            </menuitem>
+        </menu>
+    </menuitem>
     <menuitem label='_t{Administration}'>
         <icon>fas:sliders fa-fw</icon>
         <menu>

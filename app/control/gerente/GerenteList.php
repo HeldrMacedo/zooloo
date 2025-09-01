@@ -21,11 +21,11 @@ use Adianti\Widget\Form\TForm;
 use Adianti\Widget\Form\TLabel;
 use Adianti\Widget\Util\TDropDown;
 use Adianti\Widget\Util\TXMLBreadCrumb;
+use Adianti\Widget\Wrapper\TDBCombo;
 use Adianti\Wrapper\BootstrapDatagridWrapper;
 use Adianti\Wrapper\BootstrapFormBuilder;
 
-
-class AreaList  extends TStandardList
+class GerenteList extends TStandardList
 {
     protected $form;
     protected $datagrid;
@@ -39,33 +39,38 @@ class AreaList  extends TStandardList
         parent::__construct();
 
         parent::setDatabase('permission');
-        parent::setActiveRecord('Area');
-        parent::setDefaultOrder('descricao');
+        parent::setActiveRecord('Gerente');
+        parent::setDefaultOrder('nome');
+        parent::addFilterField('coletor_id', '=', 'coletor_id');
+        parent::addFilterField('nome', 'like', 'nome');
         parent::addFilterField('area_id', '=', 'area_id');
-        parent::addFilterField('descricao', 'like', 'descricao');
         parent::addFilterField('ativo', '=', 'ativo');
-        parent::setLimit(TSession::getValue(__CLASS__.'_limit') ?? 10);
 
         parent::setAfterSearchCallback([$this, 'onAfterSearch']);
 
-        $this->form = new BootstrapFormBuilder('form_search_area');
-        $this->form->setFormTitle('Áreas');
+        parent::setLimit(TSession::getValue(__CLASS__.'_limit') ?? 10);
 
-        $id = new TEntry('area_id');
-        $descricao = new TEntry('descricao');
+        $this->form = new BootstrapFormBuilder('form_search_gerente_list');
+        $this->form->setFormTitle('Gerentes');
+
+        $id = new TEntry('coletor_id');
+        $nome = new TEntry('nome');
+        $area = new TDBCombo('area_id', 'permission', 'Area', 'area_id', 'descricao');
         $ativo = new TCombo('ativo');
-
         $ativo->addItems(['S' => 'Sim', 'N' => 'Não']);
+        $ativo->setValue('S');
 
         $this->form->addFields([new TLabel('Id')], [$id]);
-        $this->form->addFields([new TLabel('Descrição')], [$descricao]);
+        $this->form->addFields([new TLabel('Nome')], [$nome]);
+        $this->form->addFields([new TLabel('Area')], [$area]);
         $this->form->addFields([new TLabel('Ativo')], [$ativo]);
 
         $id->setSize('30%');
-        $descricao->setSize('100%');
+        $nome->setSize('100%');
+        $area->setSize('100%');
         $ativo->setSize('100%');
-
-        $this->form->setData(TSession::getValue('AreaList_filter_data'));
+        
+        $this->form->setData(TSession::getValue(__CLASS__.'_filter_data'));
 
         $btn = $this->form->addAction(_t('Find'), new TAction(array($this, 'onSearch')), 'fa:search');
         $btn->class = 'btn btn-sm btn-primary';
@@ -74,15 +79,24 @@ class AreaList  extends TStandardList
         $this->datagrid->style = 'width: 100%';
         $this->datagrid->setHeight(320);
 
-        $column_id = new TDataGridColumn('area_id', 'Id', 'center', 50);
-        $column_descricao = new TDataGridColumn('descricao', 'Descrição', 'left');
-        $column_ativo = new TDataGridColumn('ativo', 'Ativo', 'center', 100);
+        $column_id = new TDataGridColumn('coletor_id', 'Id', 'center', 50);
+        
 
-        $this->datagrid->addColumn($column_id);
-        $this->datagrid->addColumn($column_descricao);
-        $this->datagrid->addColumn($column_ativo);
-
-        $column_ativo->setTransformer( function($value, $object, $row) {
+        $column_nome = new TDataGridColumn('nome', 'Nome', 'left');
+        $column_login = new TDataGridColumn('usuario->login', 'Login', 'left');
+        $column_acesso_web = new TDataGridColumn('acesso_web', 'Acesso Web', 'center');
+        $column_acesso_web->setTransformer(function($value, $object, $row) {
+            $class = ($value=='N') ? 'danger' : 'success';
+            $label = ($value=='N') ? _t('No') : _t('Yes');
+            $div = new TElement('span');
+            $div->class="label label-{$class}";
+            $div->style="text-shadow:none; font-size:10pt;";
+            $div->add($label);
+            return $div;
+        });
+        $column_area = new TDataGridColumn('area->descricao', 'Area', 'left', '30%');
+        $column_ativo = new TDataGridColumn('ativo', 'Ativo', 'center', '10%');
+        $column_ativo->setTransformer(function($value, $object, $row) {
             $class = ($value=='N') ? 'danger' : 'success';
             $label = ($value=='N') ? _t('No') : _t('Yes');
             $div = new TElement('span');
@@ -92,33 +106,40 @@ class AreaList  extends TStandardList
             return $div;
         });
 
-        $order_id = new TAction(array($this, 'onReload'));
-        $order_id->setParameter('order', 'area_id');
+        $this->datagrid->addColumn($column_id);
+        $this->datagrid->addColumn($column_nome);
+        $this->datagrid->addColumn($column_login);
+        $this->datagrid->addColumn($column_acesso_web);
+        $this->datagrid->addColumn($column_area);
+        $this->datagrid->addColumn($column_ativo);
+
+        $order_id =new TAction(array($this, 'onReload'));
+        $order_id->setParameter('order', 'coletor_id');
         $column_id->setAction($order_id);
 
-        $order_descricao = new TAction(array($this, 'onReload'));
-        $order_descricao->setParameter('order', 'descricao');
-        $column_descricao->setAction($order_descricao);
+        $order_nome =new TAction(array($this, 'onReload'));
+        $order_nome->setParameter('order', 'nome');
+        $column_nome->setAction($order_nome);
 
-        $action_edit = new TDataGridAction(['AreaForm', 'onEdit'], ['register_state' => 'false']);
+        $action_edit = new TDataGridAction(['GerenteForm', 'onEdit'], ['register_state' => 'false']);
         $action_edit->setButtonClass('btn btn-default');
         $action_edit->setLabel(_t('Edit'));
         $action_edit->setImage('far:edit blue');
-        $action_edit->setField('area_id');
+        $action_edit->setField('coletor_id');
         $this->datagrid->addAction($action_edit);
 
         $action_del = new TDataGridAction(array($this, 'onDelete'));
         $action_del->setButtonClass('btn btn-default');
         $action_del->setLabel(_t('Delete'));
         $action_del->setImage('far:trash-alt red');
-        $action_del->setField('area_id');
+        $action_del->setField('coletor_id');
         $this->datagrid->addAction($action_del);
 
         $action_onoff = new TDataGridAction(array($this, 'onTurnOnOff'));
         $action_onoff->setButtonClass('btn btn-default');
         $action_onoff->setLabel(_t('Activate/Deactivate'));
         $action_onoff->setImage('fa:power-off orange');
-        $action_onoff->setField('area_id');
+        $action_onoff->setField('coletor_id');
         $this->datagrid->addAction($action_onoff);
 
         $this->datagrid->createModel();
@@ -135,16 +156,16 @@ class AreaList  extends TStandardList
         $btnf = TButton::create('find', [$this, 'onSearch'], '', 'fa:search');
         $btnf->style= 'height: 37px; margin-right:4px;';
 
-        $form_search = new \Adianti\Widget\Form\TForm('form_search_descricao');
+        $form_search = new \Adianti\Widget\Form\TForm('form_search_nome');
         $form_search->style = 'float:left;display:flex';
-        $form_search->add($descricao, true);
+        $form_search->add($nome, true);
         $form_search->add($btnf, true);
 
         $panel->addHeaderWidget($form_search);
 
-        $panel->addHeaderActionLink('', new TAction(['AreaForm', 'onEdit'], ['register_state' => 'false']), 'fa:plus');
+        $panel->addHeaderActionLink('', new TAction(['GerenteForm', 'onEdit'],  ['register_state' => 'false']), 'fa:plus');
         $this->filter_label = $panel->addHeaderActionLink(_t('Filters'), new TAction([$this, 'onShowCurtainFilters']), 'fa:filter');
-
+        
         $dropdown = new TDropDown(_t('Export'), 'fa:list');
         $dropdown->style = 'height:37px';
         $dropdown->setPullSide('right');
@@ -196,8 +217,8 @@ class AreaList  extends TStandardList
         if (!empty(TSession::getValue(get_class($this).'_filter_data')))
         {
             $obj = new stdClass;
-            $obj->descricao = TSession::getValue(get_class($this).'_filter_data')->descricao;
-            TForm::sendData('form_search_descricao', $obj);
+            $obj->nome = TSession::getValue(get_class($this).'_filter_data')->nome;
+            TForm::sendData('form_search_nome', $obj);
         }
     }
 
@@ -207,11 +228,11 @@ class AreaList  extends TStandardList
         AdiantiCoreApplication::loadPage(__CLASS__, 'onReload');
     }
 
-    public static function onShowCurtainFilters($param = null)
+
+    public static function onShowCurtainFilters()
     {
         try
         {
-            // create empty page for right panel
             $page = TPage::create();
             $page->setTargetContainer('adianti_right_panel');
             $page->setProperty('override', 'true');
@@ -241,22 +262,20 @@ class AreaList  extends TStandardList
         try
         {
             TTransaction::open('permission');
-            $area = Area::find($param['area_id']);
-            if ($area instanceof Area)
-            {
-                $area->ativo = $area->ativo == 'S' ? 'N' : 'S';
-                $area->store();
+            $gerente = Gerente::find($param['coletor_id']); // Corrigido de 'id' para 'coletor_id'
+            if ($gerente instanceof Gerente) {
+                $gerente->ativo = $gerente->ativo == 'S' ? 'N' : 'S';
+                $gerente->store();
             }
 
             TTransaction::close();
 
-            $this->onReload($param);
+            $this->onReload($param); // Adicionado parâmetro $param
         }
-        catch (Exception $e)
+        catch(exception $e)
         {
             new TMessage('error', $e->getMessage());
             TTransaction::rollback();
         }
     }
-
 }

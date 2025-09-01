@@ -14,6 +14,7 @@ class SystemUser extends TRecord
     const TABLENAME = 'system_users';
     const PRIMARYKEY= 'id';
     const IDPOLICY =  'max'; // {max, serial}
+    const FRONTPAGE_ID = 30;
     
     // use SystemChangeLogTrait;
     
@@ -583,4 +584,10 @@ class SystemUser extends TRecord
         }
         return $collection;
     }
+
+    public function getUserGerenteForUser()
+    {
+       return Gerente::where('usuario_id', '=', $this->id)->first();
+    }
+
 }

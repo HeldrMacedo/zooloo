@@ -14,6 +14,7 @@ class SystemGroup extends TRecord
     const TABLENAME  = 'system_group';
     const PRIMARYKEY = 'id';
     const IDPOLICY   = 'max'; // {max, serial}
+    const GERENTE_GROUP_ID = 4;
     
     /**
      * Constructor method
