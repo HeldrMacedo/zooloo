@@ -10,6 +10,10 @@
                 <icon>fas:user-tie fa-fw</icon>
                 <action>GerenteList</action>
             </menuitem>
+            <menuitem label="Extração">
+                <icon>fas:clock fa-fw</icon>
+                <action>ExtracaoList</action>
+            </menuitem>
         </menu>
     </menuitem>
     <menuitem label='_t{Administration}'>

@@ -21,13 +21,11 @@ use Adianti\Widget\Form\TForm;
 use Adianti\Widget\Form\TLabel;
 use Adianti\Widget\Util\TDropDown;
 use Adianti\Widget\Util\TXMLBreadCrumb;
-use Adianti\Widget\Wrapper\TDBCombo;
 use Adianti\Wrapper\BootstrapDatagridWrapper;
 use Adianti\Wrapper\BootstrapFormBuilder;
 
-class GerenteList extends TStandardList
+class ExtracaoList extends TStandardList
 {
-    protected $form;
     protected $datagrid;
     protected $pageNavigation;
     protected $formgrid;
@@ -37,39 +35,34 @@ class GerenteList extends TStandardList
     public function __construct()
     {
         parent::__construct();
-
+        
         parent::setDatabase('permission');
-        parent::setActiveRecord('Gerente');
-        parent::setDefaultOrder('nome');
-        parent::addFilterField('coletor_id', '=', 'coletor_id');
-        parent::addFilterField('nome', 'like', 'nome');
-        parent::addFilterField('area_id', '=', 'area_id');
+        parent::setActiveRecord('Extracao');
+        parent::setDefaultOrder('descricao');
+        parent::addFilterField('descricao', 'like', 'descricao');
         parent::addFilterField('ativo', '=', 'ativo');
 
         parent::setAfterSearchCallback([$this, 'onAfterSearch']);
 
         parent::setLimit(TSession::getValue(__CLASS__.'_limit') ?? 10);
 
-        $this->form = new BootstrapFormBuilder('form_search_gerente_list');
-        $this->form->setFormTitle('Gerentes');
+        $this->form = new BootstrapFormBuilder('form_search_extracao_list');
+        $this->form->setFormTitle('Extração');
 
-        $id = new TEntry('coletor_id');
-        $nome = new TEntry('nome');
-        $area = new TDBCombo('area_id', 'permission', 'Area', 'area_id', 'descricao');
+        $id = new TEntry('extracao_id');
+        $descricao = new TEntry('descricao');
         $ativo = new TCombo('ativo');
         $ativo->addItems(['S' => 'Sim', 'N' => 'Não']);
         $ativo->setValue('S');
 
         $this->form->addFields([new TLabel('Id')], [$id]);
-        $this->form->addFields([new TLabel('Nome')], [$nome]);
-        $this->form->addFields([new TLabel('Area')], [$area]);
+        $this->form->addFields([new TLabel('Descrição')], [$descricao]);
         $this->form->addFields([new TLabel('Ativo')], [$ativo]);
 
         $id->setSize('30%');
-        $nome->setSize('100%');
-        $area->setSize('100%');
+        $descricao->setSize('100%');
         $ativo->setSize('100%');
-        
+
         $this->form->setData(TSession::getValue(__CLASS__.'_filter_data'));
 
         $btn = $this->form->addAction(_t('Find'), new TAction(array($this, 'onSearch')), 'fa:search');
@@ -79,13 +72,19 @@ class GerenteList extends TStandardList
         $this->datagrid->style = 'width: 100%';
         $this->datagrid->setHeight(320);
 
-        $column_id = new TDataGridColumn('coletor_id', 'Id', 'center', 50);
-        
+        $column_descricao           = new TDataGridColumn('descricao', 'Descrição', 'left');
+        $column_hora_limite         = new TDataGridColumn('hora_limite', 'Hora Limite', 'left');
+        $column_premiacao_maxima    = new TDataGridColumn('premiacao_maxima', 'Premiacao Maxima', 'left');
+        $column_segunda             = new TDataGridColumn('segunda', 'Segunda', 'left');
+        $column_terca               = new TDataGridColumn('terca', 'Terça', 'left');
+        $column_quarta              = new TDataGridColumn('quarta', 'Quarta', 'left');
+        $column_quinta              = new TDataGridColumn('quinta', 'Quinta', 'left');
+        $column_sexta               = new TDataGridColumn('sexta', 'Sexta', 'left');
+        $column_sabado              = new TDataGridColumn('sabado', 'Sábado', 'left');
+        $column_domingo             = new TDataGridColumn('domingo', 'Domingo', 'left');
+        $column_ativo               = new TDataGridColumn('ativo', 'Ativo', 'left');
 
-        $column_nome = new TDataGridColumn('nome', 'Nome', 'left');
-        $column_login = new TDataGridColumn('usuario->login', 'Login', 'left');
-        $column_acesso_web = new TDataGridColumn('acesso_web', 'Acesso Web', 'center');
-        $column_acesso_web->setTransformer(function($value, $object, $row) {
+        $column_segunda->setTransformer(function($value, $object, $row) {
             $class = ($value=='N') ? 'danger' : 'success';
             $label = ($value=='N') ? _t('No') : _t('Yes');
             $div = new TElement('span');
@@ -94,8 +93,60 @@ class GerenteList extends TStandardList
             $div->add($label);
             return $div;
         });
-        $column_area = new TDataGridColumn('area->descricao', 'Area', 'left', '30%');
-        $column_ativo = new TDataGridColumn('ativo', 'Ativo', 'center', '10%');
+        $column_terca->setTransformer(function($value, $object, $row) {
+            $class = ($value=='N') ? 'danger' : 'success';
+            $label = ($value=='N') ? _t('No') : _t('Yes');
+            $div = new TElement('span');
+            $div->class="label label-{$class}";
+            $div->style="text-shadow:none; font-size:10pt;";
+            $div->add($label);
+            return $div;
+        });
+        $column_quarta->setTransformer(function($value, $object, $row) {
+            $class = ($value=='N') ? 'danger' : 'success';
+            $label = ($value=='N') ? _t('No') : _t('Yes');
+            $div = new TElement('span');
+            $div->class="label label-{$class}";
+            $div->style="text-shadow:none; font-size:10pt;";
+            $div->add($label);
+            return $div;
+        });
+        $column_quinta->setTransformer(function($value, $object, $row) {
+            $class = ($value=='N') ? 'danger' : 'success';
+            $label = ($value=='N') ? _t('No') : _t('Yes');
+            $div = new TElement('span');
+            $div->class="label label-{$class}";
+            $div->style="text-shadow:none; font-size:10pt;";
+            $div->add($label);
+            return $div;
+        });
+        $column_sexta->setTransformer(function($value, $object, $row) {
+            $class = ($value=='N') ? 'danger' : 'success';
+            $label = ($value=='N') ? _t('No') : _t('Yes');
+            $div = new TElement('span');
+            $div->class="label label-{$class}";
+            $div->style="text-shadow:none; font-size:10pt;";
+            $div->add($label);
+            return $div;
+        });
+        $column_sabado->setTransformer(function($value, $object, $row) {
+            $class = ($value=='N') ? 'danger' : 'success';
+            $label = ($value=='N') ? _t('No') : _t('Yes');
+            $div = new TElement('span');
+            $div->class="label label-{$class}";
+            $div->style="text-shadow:none; font-size:10pt;";
+            $div->add($label);
+            return $div;
+        });
+        $column_domingo->setTransformer(function($value, $object, $row) {
+            $class = ($value=='N') ? 'danger' : 'success';
+            $label = ($value=='N') ? _t('No') : _t('Yes');
+            $div = new TElement('span');
+            $div->class="label label-{$class}";
+            $div->style="text-shadow:none; font-size:10pt;";
+            $div->add($label);
+            return $div;
+        });
         $column_ativo->setTransformer(function($value, $object, $row) {
             $class = ($value=='N') ? 'danger' : 'success';
             $label = ($value=='N') ? _t('No') : _t('Yes');
@@ -106,40 +157,41 @@ class GerenteList extends TStandardList
             return $div;
         });
 
-        $this->datagrid->addColumn($column_id);
-        $this->datagrid->addColumn($column_nome);
-        $this->datagrid->addColumn($column_login);
-        $this->datagrid->addColumn($column_acesso_web);
-        $this->datagrid->addColumn($column_area);
+        $this->datagrid->addColumn($column_descricao);
+        $this->datagrid->addColumn($column_hora_limite);
+        $this->datagrid->addColumn($column_premiacao_maxima);
+        $this->datagrid->addColumn($column_segunda);
+        $this->datagrid->addColumn($column_terca);
+        $this->datagrid->addColumn($column_quarta);
+        $this->datagrid->addColumn($column_quinta);
+        $this->datagrid->addColumn($column_sexta);
+        $this->datagrid->addColumn($column_sabado);
+        $this->datagrid->addColumn($column_domingo);
         $this->datagrid->addColumn($column_ativo);
 
-        $order_id =new TAction(array($this, 'onReload'));
-        $order_id->setParameter('order', 'coletor_id');
-        $column_id->setAction($order_id);
+        $order_descricao =new TAction(array($this, 'onReload'));
+        $order_descricao->setParameter('order', 'nome');
+        $column_descricao->setAction($order_descricao);
 
-        $order_nome =new TAction(array($this, 'onReload'));
-        $order_nome->setParameter('order', 'nome');
-        $column_nome->setAction($order_nome);
-
-        $action_edit = new TDataGridAction(['GerenteForm', 'onEdit'], ['register_state' => 'false']);
+        $action_edit = new TDataGridAction(['ExtracaoForm', 'onEdit'], ['register_state' => 'false']);
         $action_edit->setButtonClass('btn btn-default');
         $action_edit->setLabel(_t('Edit'));
         $action_edit->setImage('far:edit blue');
-        $action_edit->setField('coletor_id');
+        $action_edit->setField('extracao_id');
         $this->datagrid->addAction($action_edit);
 
-        $action_del = new TDataGridAction(array($this, 'onDelete'));
-        $action_del->setButtonClass('btn btn-default');
-        $action_del->setLabel(_t('Delete'));
-        $action_del->setImage('far:trash-alt red');
-        $action_del->setField('coletor_id');
-        $this->datagrid->addAction($action_del);
+        $action_delete = new TDataGridAction(['ExtracaoForm', 'onDelete'], ['register_state' => 'false']);
+        $action_delete->setButtonClass('btn btn-default');
+        $action_delete->setLabel(_t('Delete'));
+        $action_delete->setImage('far:trash-alt red');
+        $action_delete->setField('extracao_id');
+        $this->datagrid->addAction($action_delete);
 
         $action_onoff = new TDataGridAction(array($this, 'onTurnOnOff'));
         $action_onoff->setButtonClass('btn btn-default');
         $action_onoff->setLabel(_t('Activate/Deactivate'));
         $action_onoff->setImage('fa:power-off orange');
-        $action_onoff->setField('coletor_id');
+        $action_onoff->setField('extracao_id');
         $this->datagrid->addAction($action_onoff);
 
         $this->datagrid->createModel();
@@ -156,16 +208,16 @@ class GerenteList extends TStandardList
         $btnf = TButton::create('find', [$this, 'onSearch'], '', 'fa:search');
         $btnf->style= 'height: 37px; margin-right:4px;';
 
-        $form_search = new \Adianti\Widget\Form\TForm('form_search_nome');
+        $form_search = new \Adianti\Widget\Form\TForm('form_search_descricao');
         $form_search->style = 'float:left;display:flex';
-        $form_search->add($nome, true);
+        $form_search->add($descricao, true);
         $form_search->add($btnf, true);
 
         $panel->addHeaderWidget($form_search);
 
-        $panel->addHeaderActionLink('', new TAction(['GerenteForm', 'onEdit'],  ['register_state' => 'false']), 'fa:plus');
+        $panel->addHeaderActionLink('', new TAction(['ExtracaoForm', 'onEdit'],  ['register_state' => 'false']), 'fa:plus');
         $this->filter_label = $panel->addHeaderActionLink(_t('Filters'), new TAction([$this, 'onShowCurtainFilters']), 'fa:filter');
-        
+   
         $dropdown = new TDropDown(_t('Export'), 'fa:list');
         $dropdown->style = 'height:37px';
         $dropdown->setPullSide('right');
@@ -201,35 +253,7 @@ class GerenteList extends TStandardList
         parent::add($container);
     }
 
-    public function onAfterSearch($datagrid, $options)
-    {
-        if (TSession::getValue(get_class($this).'_filter_counter') > 0)
-        {
-            $this->filter_label->class = 'btn btn-primary';
-            $this->filter_label->setLabel(_t('Filters') . ' ('. TSession::getValue(get_class($this).'_filter_counter').')');
-        }
-        else
-        {
-            $this->filter_label->class = 'btn btn-default';
-            $this->filter_label->setLabel(_t('Filters'));
-        }
-
-        if (!empty(TSession::getValue(get_class($this).'_filter_data')))
-        {
-            $obj = new stdClass;
-            $obj->nome = TSession::getValue(get_class($this).'_filter_data')->nome;
-            TForm::sendData('form_search_nome', $obj);
-        }
-    }
-
-    public static function onChangeLimit($param)
-    {
-        TSession::setValue(__CLASS__ . '_limit', $param['limit'] );
-        AdiantiCoreApplication::loadPage(__CLASS__, 'onReload');
-    }
-
-
-    public static function onShowCurtainFilters()
+    public function onShowCurtainFilters()
     {
         try
         {
@@ -257,29 +281,53 @@ class GerenteList extends TStandardList
         }
     }
 
-    public function onTurnOnOff($param)
+    public function onTurnOnOff($param = null)
     {
         try
         {
             TTransaction::open('permission');
-            $gerente = Gerente::find($param['coletor_id']); // Corrigido de 'id' para 'coletor_id'
-            if ($gerente instanceof Gerente) {
-                $gerente->ativo = $gerente->ativo == 'S' ? 'N' : 'S';
-                $gerente->store();
-
-                $user = SystemUser::find($gerente->usuario_id);
-                $user->active = $user->active == 'Y' ? 'N' : 'Y';
-                $user->store();
+            $extracao = Extracao::find($param['extracao_id']);
+            if ($extracao instanceof Extracao) {
+                $extracao->ativo = $extracao->ativo == 'S' ? 'N' : 'S';
+                $extracao->store();
             }
 
             TTransaction::close();
 
             $this->onReload($param); // Adicionado parâmetro $param
         }
-        catch(exception $e)
+        catch (Exception $e) 
         {
             new TMessage('error', $e->getMessage());
             TTransaction::rollback();
         }
     }
+
+    public function onAfterSearch()
+    {
+        if (TSession::getValue(get_class($this).'_filter_counter') > 0)
+        {
+            $this->filter_label->class = 'btn btn-primary';
+            $this->filter_label->setLabel(_t('Filters') . ' ('. TSession::getValue(get_class($this).'_filter_counter').')');
+        }
+        else 
+        {
+            $this->filter_label->class = 'btn btn-default';
+            $this->filter_label->setLabel(_t('Filters'));
+        } 
+
+        if (!empty(TSession::getValue(get_class($this).'_filter_data')))
+        {
+            $obj = new stdClass;
+            $obj->nome = TSession::getValue(get_class($this).'_filter_data')->descricao;
+            TForm::sendData('form_search_descricao', $obj);
+        }
+    }
+
+    public static function onChangeLimit($param)
+    {
+        TSession::setValue(__CLASS__ . '_limit', $param['limit'] );
+        AdiantiCoreApplication::loadPage(__CLASS__, 'onReload');
+    }
+
 }

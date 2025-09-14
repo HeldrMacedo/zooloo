@@ -95,17 +95,19 @@ class AreaForm extends TPage
     public function onReload($param)
     {
         try {
+            TTransaction::open('permission');
             if ($param['key']) {
                 $key=$param['key'];
 
-                TTransaction::open('permission');
+                
                 
                 $objetc = new Area($key);
                 $this->form->setData($objetc);
-                TTransaction::close();
+                
             }else {
                 $this->form->clear();
             }
+            TTransaction::close();
         } catch (\Exception $e) {
             TTransaction::rollback();
             new TMessage('error', $e->getMessage());

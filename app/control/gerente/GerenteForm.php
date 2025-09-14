@@ -85,8 +85,13 @@ class GerenteForm extends TPage
             $object->name = $data->nome;
             $object->email = $data->login . '@zooloo.com';
             $object->frontpage_id = SystemUser::FRONTPAGE_ID;
-            $object->active = $data->ativo;
+            $object->active = $data->ativo == 'S' ? 'Y' : 'N';
 
+            
+            if (!empty($data->coletor_id)) {
+                $gerente = Gerente::find($data->coletor_id);
+                $object->id = $gerente->usuario_id;
+            }
 
             $senha = $object->password;
 
@@ -99,7 +104,7 @@ class GerenteForm extends TPage
                 throw new Exception("O campo região é obrigatório.");
             }
             
-             if( empty($data->coletor_id) )
+             if( empty($object->id) )
             {
                 if (SystemUser::newFromLogin($object->login) instanceof SystemUser)
                 {
@@ -139,6 +144,8 @@ class GerenteForm extends TPage
             $object->store();
 
             $userGerente = $object->getUserGerenteForUser();
+
+            
             if( $userGerente )
             {
                 $userGerente->fromArray((array) $data);
