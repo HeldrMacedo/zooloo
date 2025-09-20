@@ -14,6 +14,10 @@
                 <icon>fas:clock fa-fw</icon>
                 <action>ExtracaoList</action>
             </menuitem>
+            <menuitem label="Modalidade">
+                <icon>fas:building fa-fw</icon>
+                <action>ModalidadeList</action>
+            </menuitem>
         </menu>
     </menuitem>
     <menuitem label='_t{Administration}'>
