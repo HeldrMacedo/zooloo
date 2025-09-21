@@ -18,6 +18,10 @@
                 <icon>fas:building fa-fw</icon>
                 <action>ModalidadeList</action>
             </menuitem>
+            <menuitem label="Vendedor">
+                <icon>fas:id-badge fa-fw</icon>
+                <action>VendedorList</action>
+            </menuitem>
         </menu>
     </menuitem>
     <menuitem label='_t{Administration}'>

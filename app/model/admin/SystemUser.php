@@ -15,6 +15,7 @@ class SystemUser extends TRecord
     const PRIMARYKEY= 'id';
     const IDPOLICY =  'max'; // {max, serial}
     const FRONTPAGE_ID = 30;
+    const FUNCTION_VENDEDOR = 'Vendedor';
     
     // use SystemChangeLogTrait;
     

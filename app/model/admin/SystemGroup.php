@@ -15,6 +15,7 @@ class SystemGroup extends TRecord
     const PRIMARYKEY = 'id';
     const IDPOLICY   = 'max'; // {max, serial}
     const GERENTE_GROUP_ID = 4;
+    const VENDEDOR_GROUP_ID = 5;
     
     /**
      * Constructor method
