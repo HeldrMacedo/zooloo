@@ -24,6 +24,15 @@
             </menuitem>
         </menu>
     </menuitem>
+    <menuitem label="Configurações">
+        <icon>fas:cog fa-fw</icon>
+        <menu>
+            <menuitem label="Área Extração">
+                <icon>fas:map fa-fw</icon>
+                <action>AreaExtracaoList</action>
+            </menuitem>
+        </menu>
+    </menuitem>
     <menuitem label='_t{Administration}'>
         <icon>fas:sliders fa-fw</icon>
         <menu>
