@@ -35,6 +35,14 @@
                 <icon>fas:map fa-fw</icon>
                 <action>AreaCotacaoList</action>
             </menuitem>
+            <menuitem label="Área Limite">
+                <icon>fas:map fa-fw</icon>
+                <action>AreaLimiteList</action>
+            </menuitem>
+            <menuitem label="Área Comissão Modalidade">
+                <icon>fas:map fa-fw</icon>
+                <action>AreaComissaoModalidadeList</action>
+            </menuitem>
         </menu>
     </menuitem>
     <menuitem label='_t{Administration}'>
