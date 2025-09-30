@@ -22,26 +22,48 @@
                 <icon>fas:id-badge fa-fw</icon>
                 <action>VendedorList</action>
             </menuitem>
+            
         </menu>
     </menuitem>
     <menuitem label="Configurações">
         <icon>fas:cog fa-fw</icon>
         <menu>
             <menuitem label="Área Extração">
-                <icon>fas:map fa-fw</icon>
+                <icon>fas:user-cog fa-fw</icon>
                 <action>AreaExtracaoList</action>
             </menuitem>
             <menuitem label="Área Cotação">
-                <icon>fas:map fa-fw</icon>
+                <icon>fas:user-cog fa-fw</icon>
                 <action>AreaCotacaoList</action>
             </menuitem>
             <menuitem label="Área Limite">
-                <icon>fas:map fa-fw</icon>
+                <icon>fas:user-cog fa-fw</icon>
                 <action>AreaLimiteList</action>
             </menuitem>
             <menuitem label="Área Comissão Modalidade">
-                <icon>fas:map fa-fw</icon>
+                <icon>fas:user-cog fa-fw</icon>
                 <action>AreaComissaoModalidadeList</action>
+            </menuitem>
+            <menuitem label="Palpite Cotado">
+                <icon>fas:user-cog fa-fw</icon>
+                <action>PalpiteCotadoList</action>
+            </menuitem>
+            <menuitem label="Extração Descarga">
+                <icon>fas:user-cog fa-fw</icon>
+                <action>ExtracaoDescargaList</action>
+            </menuitem>
+            <menuitem label="Parâmetros">
+                <icon>fas:user-cog fa-fw</icon>
+                <action>ParametrosList</action>
+            </menuitem>
+        </menu>
+    </menuitem>
+    <menuitem label="Operacional">
+        <icon>fas:user-cog fa-fw</icon>
+        <menu>
+            <menuitem label="Resultado">
+                <icon>fas:user-cog fa-fw</icon>
+                <action>ResultadoList</action>
             </menuitem>
         </menu>
     </menuitem>

@@ -33,7 +33,7 @@ class AreaComissaoModalidadeForm extends TPage
         $id = new TEntry('area_comissao_modalidade_id');
         $area_id = new TDBCombo('area_id', 'permission', 'Area', 'area_id', 'descricao');
         $modalidade_id = new TDBCombo('modalidade_id', 'permission', 'Modalidade', 'modalidade_id', 'apresentacao');
-        $comissao = new TNumeric('comissao', 2, ',', '.');
+        $comissao = new TEntry('comissao');
 
         // Configurações dos campos
         $id->setSize('50%');
@@ -46,8 +46,9 @@ class AreaComissaoModalidadeForm extends TPage
         $modalidade_id->addValidation('modalidade_id', new TRequiredValidator);
         
         $comissao->setSize('100%');
+        $comissao->setMask('99,99');
+        $comissao->setNumericMask(2, ',', '.', true);
         $comissao->addValidation('comissao', new TRequiredValidator);
-        $comissao->setMask('99.99');
 
         // Adicionando campos ao formulário
         $this->form->addFields([new TLabel('Id')], [$id]);
