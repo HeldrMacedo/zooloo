@@ -7,7 +7,7 @@ return [
         'title' => 'Adianti Template 8.1',
         'theme' => 'adminbs5',
         'seed' => 'odfu6asnodf8as',
-        'rest_key' => '',
+        'rest_key' => 'zooloo_api_key_2025',
         'multiunit' => '0',
         'public_view' => '0',
         'public_entry' => '',

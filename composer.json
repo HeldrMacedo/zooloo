@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test": "php tests/run.php"
+  },
   "require": {
     "phpmailer/phpmailer": "^6.0",
     "tburry/pquery": "^1.1",

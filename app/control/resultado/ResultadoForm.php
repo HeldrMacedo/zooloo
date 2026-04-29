@@ -397,10 +397,9 @@ class ResultadoForm extends TPage
             $sorteio->store();
             
             TTransaction::close();
+            $pos_action = new TAction(['ResultadoList', 'onReload']);
+            new TMessage('info', 'Resultado salvo com sucesso!', $pos_action);
             
-            new TMessage('info', 'Resultado salvo com sucesso!');
-            
-            // Recarrega o formulário
             $this->onEdit(['key' => $data->sorteio_id]);
         }
         catch (Exception $e)

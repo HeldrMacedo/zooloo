@@ -1,4 +1,5 @@
 TODO: Ao deixar um gerente inativo, também deixar o usuário 
+TODO: Na tela de resultado precisa verifacar o tempo da extração para poder ser salva
 echo '<pre>';
 echo "CHEGOU";
  echo '</pre>';
