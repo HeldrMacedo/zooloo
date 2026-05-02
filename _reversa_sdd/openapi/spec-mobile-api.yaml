@@ -1,0 +1,1067 @@
+openapi: 3.0.3
+info:
+  title: Zooloo — API REST Mobile
+  description: |
+    API REST do Zooloo para o aplicativo móvel dos vendedores.
+
+    **Roteamento Adianti:** todas as chamadas vão para `rest.php` usando os
+    parâmetros de query `class` e `method`. Os paths abaixo representam cada
+    combinação lógica de classe+método como um endpoint distinto.
+
+    **Autenticação:** JWT HS256, validade 1 hora.
+    O token é passado como parâmetro de query `token=<JWT>`.
+
+    **Aviso de segurança:** `refreshToken` não verifica se o token está dentro
+    do prazo antes de renová-lo — um token expirado pode ser renovado
+    indefinidamente (LAcUNA a corrigir).
+  version: "1.0.0"
+  contact:
+    name: Zooloo — Engenharia
+servers:
+  - url: http://localhost
+    description: Ambiente local (Docker)
+  - url: http://localhost:8000
+    description: Porta alternativa
+
+tags:
+  - name: Autenticação
+    description: Login, validação e refresh de token JWT
+  - name: Sorteios
+    description: Sorteios abertos disponíveis para o vendedor
+  - name: Modalidades
+    description: Modalidades com cotações e limites por área
+  - name: Bilhete
+    description: Registro, cancelamento, detalhe e lista de bilhetes JB
+  - name: Vendedor
+    description: Perfil e permissões do vendedor autenticado
+  - name: Resultado
+    description: Resultados dos sorteios encerrados
+  - name: Caixa
+    description: Resumo financeiro do dia do vendedor
+  - name: Terminal
+    description: Registro do dispositivo do vendedor
+
+paths:
+
+  # ─── AUTENTICAÇÃO ────────────────────────────────────────────────────────────
+
+  /rest.php?class=ApplicationAuthenticationRestService&method=login:
+    post:
+      tags: [Autenticação]
+      summary: Login — obter JWT
+      operationId: auth_login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [login, password]
+                  properties:
+                    login:
+                      type: string
+                      example: vendedor1
+                    password:
+                      type: string
+                      format: password
+                      example: "senha123"
+      responses:
+        "200":
+          description: Login bem-sucedido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Credenciais inválidas ou usuário inativo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /rest.php?class=ApplicationAuthenticationRestService&method=validateToken:
+    get:
+      tags: [Autenticação]
+      summary: Validar JWT
+      operationId: auth_validateToken
+      parameters:
+        - $ref: "#/components/parameters/token"
+      responses:
+        "200":
+          description: Token válido — retorna dados do usuário
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateTokenResponse"
+        "401":
+          description: Token inválido ou expirado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /rest.php?class=ApplicationAuthenticationRestService&method=refreshToken:
+    post:
+      tags: [Autenticação]
+      summary: Renovar JWT
+      description: |
+        Emite novo token com validade de +1 hora a partir do token atual.
+
+        **ATENÇÃO:** Não verifica se o token está expirado antes de renovar.
+        Um token vencido pode ser renovado indefinidamente (lacuna de segurança).
+      operationId: auth_refreshToken
+      parameters:
+        - $ref: "#/components/parameters/token"
+      responses:
+        "200":
+          description: Novo token emitido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+
+  /rest.php?class=ApplicationAuthenticationRestService&method=logout:
+    post:
+      tags: [Autenticação]
+      summary: Logout
+      description: |
+        Registra o logout em log de acesso. **O token não é invalidado** —
+        a API é stateless; tokens expiram pelo prazo de 1 hora.
+      operationId: auth_logout
+      parameters:
+        - $ref: "#/components/parameters/token"
+      responses:
+        "200":
+          description: Logout registrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+
+  # ─── SORTEIOS ────────────────────────────────────────────────────────────────
+
+  /rest.php?class=SorteioRestService&method=abertos:
+    get:
+      tags: [Sorteios]
+      summary: Listar sorteios abertos do dia
+      description: |
+        Retorna sorteios abertos (`situacao='A'`) da data atual disponíveis para
+        a área do vendedor autenticado. Apenas sorteios com `hora_limite > CURRENT_TIME`
+        e extração ativa (`cfg_area_extracao.ativo=true`) são retornados.
+      operationId: sorteio_abertos
+      parameters:
+        - $ref: "#/components/parameters/token"
+      responses:
+        "200":
+          description: Lista de sorteios abertos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Sorteio"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── MODALIDADES ─────────────────────────────────────────────────────────────
+
+  /rest.php?class=ModalidadeRestService&method=disponiveis:
+    get:
+      tags: [Modalidades]
+      summary: Modalidades disponíveis para um sorteio
+      description: |
+        Retorna modalidades ativas para o `sorteio_id` na área do vendedor,
+        com cotações (`cfg_area_cotacao`) e limites (`cfg_area_limite`) aplicados
+        via COALESCE — valores da área prevalecem sobre valores da modalidade.
+
+        Os palpites cotados especiais (`cfg_palpite_cotado`) são injetados por modalidade.
+
+        A resposta é agrupada por `descricao_grupo` (ex: Milhar, Centena, Dezena, Grupo…).
+      operationId: modalidade_disponiveis
+      parameters:
+        - $ref: "#/components/parameters/token"
+        - name: sorteio_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 42
+      responses:
+        "200":
+          description: Modalidades agrupadas por tipo de jogo
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GrupoModalidade"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── BILHETE ─────────────────────────────────────────────────────────────────
+
+  /rest.php?class=BilheteRestService&method=registrar:
+    post:
+      tags: [Bilhete]
+      summary: Registrar bilhete JB
+      description: |
+        Registra um novo bilhete de Jogo do Bicho. Valida:
+        1. Terminal ativo vinculado ao vendedor
+        2. Sorteio aberto + extração na área + `hora_limite > CURRENT_TIME`
+        3. `valor_palpite <= limite` (`cfg_area_limite` COALESCE `cad_modalidade.limite_palpite`)
+        4. `total_bilhete <= vendedor.limite_venda`
+
+        Estrutura criada: `mov_jb` → `mov_jb_sorteio` → `mov_jb_sort_palpite`.
+      operationId: bilhete_registrar
+      parameters:
+        - $ref: "#/components/parameters/token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [terminal_id, jogos]
+                  properties:
+                    terminal_id:
+                      type: integer
+                      example: 7
+                    nome_cliente:
+                      type: string
+                      example: Maria Silva
+                    fone_cliente:
+                      type: string
+                      example: "11999990000"
+                    jogos:
+                      type: array
+                      minItems: 1
+                      items:
+                        $ref: "#/components/schemas/JogoInput"
+      responses:
+        "200":
+          description: Bilhete registrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BilheteRegistradoResponse"
+        "400":
+          description: Validação falhou (limite excedido, sorteio fechado, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /rest.php?class=BilheteRestService&method=cancelar:
+    post:
+      tags: [Bilhete]
+      summary: Cancelar bilhete
+      description: |
+        Cancela um bilhete. Validações:
+        - `vendedor.pode_cancelar='S'`
+        - Bilhete pertence ao vendedor autenticado
+        - Bilhete ainda não cancelado
+        - Se `pode_cancelar_tempo` definido: `agora - data_bilhete <= tempo_limite`
+        - Se `pode_cancelar_qtde > 0`: conta cancelamentos do dia e verifica limite
+      operationId: bilhete_cancelar
+      parameters:
+        - $ref: "#/components/parameters/token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bilhete_id]
+              properties:
+                bilhete_id:
+                  type: integer
+                  example: 123
+                motivo:
+                  type: string
+                  example: Digitação errada
+      responses:
+        "200":
+          description: Bilhete cancelado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Bilhete cancelado com sucesso
+        "400":
+          description: Cancelamento não permitido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /rest.php?class=BilheteRestService&method=detalhe:
+    get:
+      tags: [Bilhete]
+      summary: Detalhe de um bilhete
+      description: |
+        Retorna bilhete completo com todos os sorteios, palpites, prêmio previsto
+        e status de reimpressão. Se `reimprimir=1`, valida `pode_reimprimir='S'`
+        e incrementa o contador de reimpressões.
+      operationId: bilhete_detalhe
+      parameters:
+        - $ref: "#/components/parameters/token"
+        - name: bilhete_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 123
+        - name: reimprimir
+          in: query
+          schema:
+            type: integer
+            enum: [0, 1]
+            default: 0
+      responses:
+        "200":
+          description: Detalhe do bilhete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BilheteDetalhe"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Bilhete não pertence ao vendedor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /rest.php?class=BilheteRestService&method=lista:
+    get:
+      tags: [Bilhete]
+      summary: Listar bilhetes do vendedor
+      description: Lista paginada dos bilhetes do vendedor autenticado no período.
+      operationId: bilhete_lista
+      parameters:
+        - $ref: "#/components/parameters/token"
+        - name: data_inicio
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-04-01"
+        - name: data_fim
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-04-30"
+        - name: situacao
+          in: query
+          schema:
+            type: string
+            enum: [todos, ativos, cancelados]
+            default: todos
+        - name: pagina
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: por_pagina
+          in: query
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: Lista paginada de bilhetes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BilheteListaResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── VENDEDOR ────────────────────────────────────────────────────────────────
+
+  /rest.php?class=VendedorRestService&method=me:
+    get:
+      tags: [Vendedor]
+      summary: Perfil do vendedor autenticado
+      description: Retorna dados cadastrais e permissões operacionais do vendedor.
+      operationId: vendedor_me
+      parameters:
+        - $ref: "#/components/parameters/token"
+      responses:
+        "200":
+          description: Perfil do vendedor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendedorPerfil"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── RESULTADO ───────────────────────────────────────────────────────────────
+
+  /rest.php?class=ResultadoRestService&method=recentes:
+    get:
+      tags: [Resultado]
+      summary: Resultados recentes dos sorteios
+      description: |
+        Retorna até 50 sorteios encerrados (`situacao='F'`) da área do vendedor
+        nos últimos N dias. Para cada número sorteado, calcula grupo e animal.
+
+        **BUG:** Quando `dezmilhar='00'`, o grupo calculado retorna 0 em vez de 25
+        (VACA). A implementação correta está em `ResultadoForm.php` (trata `dezena=0`
+        como `100 → ceil(100/4) = 25`). A corrigir no Zooloo.
+      operationId: resultado_recentes
+      parameters:
+        - $ref: "#/components/parameters/token"
+        - name: dias
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+            default: 3
+          example: 7
+        - name: extracao_id
+          in: query
+          schema:
+            type: integer
+          example: 5
+      responses:
+        "200":
+          description: Lista de sorteios com resultados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ResultadoSorteio"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── CAIXA ───────────────────────────────────────────────────────────────────
+
+  /rest.php?class=CaixaRestService&method=resumo:
+    get:
+      tags: [Caixa]
+      summary: Resumo financeiro do dia
+      description: |
+        Retorna totais de vendas, cancelamentos, comissão, prêmios pagos e
+        saldo do vendedor autenticado para a data informada.
+        Inclui breakdown por extração.
+      operationId: caixa_resumo
+      parameters:
+        - $ref: "#/components/parameters/token"
+        - name: data
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Padrão — hoje
+          example: "2026-04-30"
+      responses:
+        "200":
+          description: Resumo financeiro do dia
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaixaResumo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── TERMINAL ────────────────────────────────────────────────────────────────
+
+  /rest.php?class=TerminalRestService&method=registrar:
+    post:
+      tags: [Terminal]
+      summary: Registrar/atualizar dispositivo
+      description: |
+        Upsert do terminal do vendedor: se já existe terminal com o mesmo
+        `serial` para o vendedor, atualiza `tipo` e ativa. Caso contrário,
+        cria novo com `multi_usuario='N'`, `ativo='S'`.
+
+        Deve ser chamado pelo app ao inicializar antes do primeiro bilhete.
+      operationId: terminal_registrar
+      parameters:
+        - $ref: "#/components/parameters/token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [serial]
+                  properties:
+                    serial:
+                      type: string
+                      example: "ANDROID-ABC123"
+                    tipo:
+                      type: string
+                      default: APP
+                      example: APP
+      responses:
+        "200":
+          description: Terminal registrado/atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+# ─── COMPONENTS ──────────────────────────────────────────────────────────────
+
+components:
+
+  parameters:
+    token:
+      name: token
+      in: query
+      required: true
+      description: JWT obtido via login
+      schema:
+        type: string
+      example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+  responses:
+    Unauthorized:
+      description: Token ausente, inválido ou expirado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Credenciais inválidas"
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Login realizado com sucesso"
+        user:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 1
+            login:
+              type: string
+              example: vendedor1
+            name:
+              type: string
+              example: "João Silva"
+            email:
+              type: string
+              format: email
+            active:
+              type: string
+              enum: [Y, N]
+              example: Y
+        token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiJ9..."
+        expires_at:
+          type: string
+          format: date-time
+          example: "2026-04-30T15:00:00"
+
+    ValidateTokenResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          example: true
+        user:
+          type: string
+          example: vendedor1
+        userid:
+          type: integer
+          example: 1
+        expires:
+          type: integer
+          description: Unix timestamp de expiração
+          example: 1746028800
+
+    Sorteio:
+      type: object
+      properties:
+        sorteio_id:
+          type: integer
+          example: 42
+        sorteio_numero:
+          type: integer
+          example: 10
+        data_sorteio:
+          type: string
+          format: date
+          example: "2026-04-30"
+        hora_limite:
+          type: string
+          example: "18:00:00"
+        extracao_id:
+          type: integer
+          example: 5
+        extracao_descricao:
+          type: string
+          example: "Federal"
+        extracao_instantanea:
+          type: string
+          enum: [S, N]
+          example: N
+        situacao:
+          type: string
+          enum: [A, F]
+          description: "A=Aberto, F=Fechado"
+          example: A
+        minutos_restantes:
+          type: integer
+          description: Minutos até hora_limite (0 se expirado)
+          example: 120
+        urgente:
+          type: boolean
+          description: true se minutos_restantes <= 30
+          example: false
+
+    GrupoModalidade:
+      type: object
+      properties:
+        grupo:
+          type: string
+          example: "Milhar"
+        modalidades:
+          type: array
+          items:
+            $ref: "#/components/schemas/Modalidade"
+
+    Modalidade:
+      type: object
+      properties:
+        modalidade_id:
+          type: integer
+          example: 1
+        apresentacao:
+          type: string
+          example: MIL
+        ordem:
+          type: integer
+          example: 1
+        multiplicador:
+          type: number
+          format: double
+          description: Cotação efetiva (COALESCE cfg_area_cotacao, cad_modalidade)
+          example: 6000.0
+        limite_palpite:
+          type: number
+          format: double
+          description: Limite efetivo (COALESCE cfg_area_limite, cad_modalidade)
+          example: 500.0
+        tamanho_max:
+          type: integer
+          description: Número de dígitos do palpite
+          example: 4
+        qtd_colocacao_premio:
+          type: integer
+          description: Número de colocações que conferem prêmio
+          example: 5
+        informar_valores_modalidade:
+          type: string
+          enum: [S, N]
+          example: N
+        orientacao:
+          type: string
+          example: ""
+        mult_col_01:
+          type: number
+          format: double
+          example: 6000.0
+        mult_col_02:
+          type: number
+          format: double
+          example: 3000.0
+        mult_col_03:
+          type: number
+          format: double
+          example: 2000.0
+        mult_col_04:
+          type: number
+          format: double
+          example: 1500.0
+        mult_col_05:
+          type: number
+          format: double
+          example: 1000.0
+        palpites_cotados:
+          type: array
+          items:
+            $ref: "#/components/schemas/PalpiteCotado"
+
+    PalpiteCotado:
+      type: object
+      properties:
+        palpite:
+          type: string
+          example: "0001"
+        cotacao:
+          type: number
+          format: double
+          example: 15.0
+
+    JogoInput:
+      type: object
+      required: [sorteio_id, modalidade_id, palpites, colocacao_inicial, colocacao_final, valor_palpite]
+      properties:
+        sorteio_id:
+          type: integer
+          example: 42
+        modalidade_id:
+          type: integer
+          example: 1
+        palpites:
+          type: array
+          items:
+            type: string
+          example: ["1234", "5678"]
+        colocacao_inicial:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 1
+        colocacao_final:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 5
+        valor_palpite:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 2.00
+
+    BilheteRegistradoResponse:
+      type: object
+      properties:
+        jb_id:
+          type: integer
+          example: 123
+        bilhete_numero:
+          type: integer
+          description: Sequencial diário por vendedor
+          example: 5
+        string_autorizacao:
+          type: string
+          description: "Código de autorização: date('ymd') + 6 chars hex"
+          example: "26043012ab3c"
+        total_bilhete:
+          type: number
+          format: double
+          example: 10.00
+        data_hora:
+          type: string
+          format: date-time
+          example: "2026-04-30T14:30:00"
+        vendedor_nome:
+          type: string
+          example: "João Silva"
+
+    BilheteDetalhe:
+      type: object
+      properties:
+        jb_id:
+          type: integer
+          example: 123
+        bilhete_numero:
+          type: integer
+          example: 5
+        string_autorizacao:
+          type: string
+          example: "26043012ab3c"
+        cancelado:
+          type: string
+          enum: [S, N]
+          example: N
+        total_bilhete:
+          type: number
+          format: double
+          example: 10.00
+        data_hora:
+          type: string
+          format: date-time
+        reimpressao:
+          type: integer
+          description: Contador de reimpressões
+          example: 0
+        sorteios:
+          type: array
+          items:
+            type: object
+            properties:
+              sorteio_id:
+                type: integer
+              extracao_descricao:
+                type: string
+              modalidade_apresentacao:
+                type: string
+              palpites:
+                type: array
+                items:
+                  type: string
+              sorteado:
+                type: string
+                enum: [S, N]
+              sorteado_valor:
+                type: number
+                format: double
+              previsao_premio:
+                type: number
+                format: double
+
+    BilheteListaResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total de registros para paginação
+          example: 42
+        pagina:
+          type: integer
+          example: 1
+        por_pagina:
+          type: integer
+          example: 20
+        itens:
+          type: array
+          items:
+            type: object
+            properties:
+              jb_id:
+                type: integer
+              bilhete_numero:
+                type: integer
+              data_hora:
+                type: string
+                format: date-time
+              cancelado:
+                type: string
+                enum: [S, N]
+              total_bilhete:
+                type: number
+                format: double
+
+    VendedorPerfil:
+      type: object
+      properties:
+        vendedor_id:
+          type: integer
+          example: 1
+        nome:
+          type: string
+          example: "João Silva"
+        area_id:
+          type: integer
+          example: 2
+        area_descricao:
+          type: string
+          example: "Zona Sul"
+        comissao:
+          type: number
+          format: double
+          description: Percentual de comissão
+          example: 5.0
+        limite_venda:
+          type: number
+          format: double
+          example: 500.0
+        pode_cancelar:
+          type: string
+          enum: [S, N]
+          example: S
+        pode_cancelar_tempo:
+          type: string
+          nullable: true
+          description: Tempo máximo para cancelar (HH:MM:SS)
+          example: "00:30:00"
+        pode_cancelar_qtde:
+          type: integer
+          description: Quantidade máxima de cancelamentos por dia (0 = ilimitado)
+          example: 5
+        pode_pagar:
+          type: string
+          enum: [S, N]
+          example: N
+        pode_reimprimir:
+          type: string
+          enum: [S, N]
+          example: S
+        pode_reimprimir_qtde:
+          type: integer
+          description: Número máximo de reimpressões por bilhete
+          example: 3
+        treinamento:
+          type: string
+          enum: [S, N]
+          description: Modo treinamento — bilhetes não contam como reais
+          example: N
+
+    ResultadoSorteio:
+      type: object
+      properties:
+        sorteio_id:
+          type: integer
+          example: 40
+        data_sorteio:
+          type: string
+          format: date
+          example: "2026-04-29"
+        hora_sorteio:
+          type: string
+          example: "18:00:00"
+        extracao_id:
+          type: integer
+          example: 5
+        extracao_descricao:
+          type: string
+          example: "Federal"
+        numeros:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            properties:
+              posicao:
+                type: integer
+                minimum: 1
+                maximum: 10
+                example: 1
+              numero:
+                type: string
+                description: Milhar sorteada (4 dígitos)
+                example: "1234"
+              grupo:
+                type: integer
+                description: |
+                  Grupo do animal (1–25). Bug conhecido: dezmilhar=00
+                  retorna 0 em vez de 25 (VACA).
+                example: 9
+              grupo_descricao:
+                type: string
+                example: "Cobra"
+
+    CaixaResumo:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+          example: "2026-04-30"
+        qtde_bilhetes:
+          type: integer
+          example: 12
+        qtde_cancelados:
+          type: integer
+          example: 1
+        total_vendido:
+          type: number
+          format: double
+          example: 240.00
+        total_cancelado:
+          type: number
+          format: double
+          example: 20.00
+        total_liquido:
+          type: number
+          format: double
+          description: total_vendido - total_cancelado
+          example: 220.00
+        total_comissao:
+          type: number
+          format: double
+          example: 11.00
+        total_premios_pagos:
+          type: number
+          format: double
+          example: 60.00
+        saldo_liquido:
+          type: number
+          format: double
+          description: total_liquido - total_premios_pagos
+          example: 160.00
+        por_extracao:
+          type: array
+          items:
+            type: object
+            properties:
+              extracao_id:
+                type: integer
+              extracao_descricao:
+                type: string
+                example: "Federal"
+              qtde_bilhetes:
+                type: integer
+                example: 8
+              total_vendido:
+                type: number
+                format: double
+                example: 160.00
+
+    TerminalResponse:
+      type: object
+      properties:
+        terminal_id:
+          type: integer
+          example: 7
+        vendedor_id:
+          type: integer
+          example: 1
+        serial:
+          type: string
+          example: "ANDROID-ABC123"
+        tipo:
+          type: string
+          example: APP
+        ativo:
+          type: string
+          enum: [S, N]
+          example: S

@@ -1,0 +1,1350 @@
+openapi: 3.0.3
+info:
+  title: Zooloo — API Cadastros
+  description: |
+    APIs REST para os cinco módulos de cadastro do Zooloo.
+
+    **Contexto:** No Java/JHipster (allsystem), estas APIs são expostas pelo
+    Spring Boot e consumidas pelo Angular. No Zooloo PHP, as telas são
+    server-rendered (Adianti), mas este spec define o contrato REST que
+    precisará ser implementado caso uma interface SPA ou o app móvel
+    necessite acessar dados de cadastro diretamente.
+
+    **Nota Dual-Entity:** Gerente e Vendedor criam simultaneamente um
+    `SystemUser` e o registro de domínio em uma única transação. A API
+    reflete essa semântica.
+
+    **Segurança das senhas:** MD5 sem salt (vulnerabilidade conhecida, ADR-003).
+    Corrigir para bcrypt na implementação PHP.
+  version: "1.0.0"
+servers:
+  - url: http://localhost
+    description: Ambiente local (Docker)
+
+tags:
+  - name: Área
+    description: Zonas geográficas/franquias da banca (`cad_area`)
+  - name: Gerente
+    description: Supervisores/coletores de área (`cad_coletor`)
+  - name: Extração
+    description: Sorteios agendados com dias da semana e hora limite (`cad_extracao`)
+  - name: Modalidade
+    description: Tipos de aposta com multiplicadores e limites (`cad_modalidade`)
+  - name: Vendedor
+    description: Pontos de venda com credenciais e permissões (`cad_vendedor`)
+
+paths:
+
+  # ─── ÁREA ────────────────────────────────────────────────────────────────────
+
+  /api/areas:
+    get:
+      tags: [Área]
+      summary: Listar áreas
+      operationId: area_list
+      parameters:
+        - name: descricao
+          in: query
+          schema:
+            type: string
+          description: Filtro LIKE em descricao
+          example: Norte
+        - name: ativo
+          in: query
+          schema:
+            type: string
+            enum: [S, N]
+          example: S
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/size"
+        - $ref: "#/components/parameters/sort"
+      responses:
+        "200":
+          description: Lista de áreas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AreaPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Área]
+      summary: Criar área
+      operationId: area_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AreaInput"
+      responses:
+        "201":
+          description: Área criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Area"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/areas/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+    get:
+      tags: [Área]
+      summary: Obter área por ID
+      operationId: area_get
+      responses:
+        "200":
+          description: Área encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Area"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Área]
+      summary: Atualizar área
+      operationId: area_update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AreaInput"
+      responses:
+        "200":
+          description: Área atualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Area"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Área]
+      summary: Excluir área
+      description: |
+        Hard delete — sem cascata em PHP. Verificar integridade referencial
+        (vendedores, extrações e configurações vinculadas) antes de excluir.
+      operationId: area_delete
+      responses:
+        "204":
+          description: Área excluída
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Área possui vínculos que impedem exclusão
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/areas/{id}/toggle-ativo:
+    put:
+      tags: [Área]
+      summary: Alternar status ativo/inativo
+      description: Inverte `ativo` entre S e N sem alterar outros campos.
+      operationId: area_toggleAtivo
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Status alterado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Area"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── GERENTE ─────────────────────────────────────────────────────────────────
+
+  /api/gerentes:
+    get:
+      tags: [Gerente]
+      summary: Listar gerentes
+      description: Filtra por id, nome, área e ativo. Tabela de domínio é `cad_coletor`.
+      operationId: gerente_list
+      parameters:
+        - name: nome
+          in: query
+          schema:
+            type: string
+          description: Filtro LIKE em nome
+        - name: area_id
+          in: query
+          schema:
+            type: integer
+        - name: ativo
+          in: query
+          schema:
+            type: string
+            enum: [S, N]
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/size"
+      responses:
+        "200":
+          description: Lista de gerentes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GerentePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Gerente]
+      summary: Criar gerente
+      description: |
+        Cria simultaneamente um `SystemUser` e um `cad_coletor` (Dual-Entity).
+        O `login` deve ser único no sistema. A senha é hashada com MD5 sem salt
+        (vulnerabilidade — corrigir para bcrypt na implementação PHP).
+      operationId: gerente_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GerenteInput"
+      responses:
+        "201":
+          description: Gerente criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gerente"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Login já existe no sistema
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/gerentes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+    get:
+      tags: [Gerente]
+      summary: Obter gerente por ID
+      operationId: gerente_get
+      responses:
+        "200":
+          description: Gerente encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gerente"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Gerente]
+      summary: Atualizar gerente
+      description: |
+        Atualiza `cad_coletor` e, se `password` fornecido, também o `SystemUser`.
+        Se `ativo` for alterado, sincroniza o campo `active` do `SystemUser`.
+      operationId: gerente_update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GerenteInput"
+      responses:
+        "200":
+          description: Gerente atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gerente"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Gerente]
+      summary: Excluir gerente
+      operationId: gerente_delete
+      responses:
+        "204":
+          description: Gerente excluído
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/gerentes/{id}/toggle-ativo:
+    put:
+      tags: [Gerente]
+      summary: Alternar status ativo/inativo
+      description: |
+        Inverte `ativo` em `cad_coletor` e sincroniza `system_users.active`
+        (Y para S, N para N). TODO documentado: ao desativar gerente, inativar
+        o SystemUser vinculado — implementado neste endpoint.
+      operationId: gerente_toggleAtivo
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Status alterado e SystemUser sincronizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gerente"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── EXTRAÇÃO ────────────────────────────────────────────────────────────────
+
+  /api/extracaos:
+    get:
+      tags: [Extração]
+      summary: Listar extrações
+      operationId: extracao_list
+      parameters:
+        - name: descricao
+          in: query
+          schema:
+            type: string
+          description: Filtro LIKE
+        - name: ativo
+          in: query
+          schema:
+            type: string
+            enum: [S, N]
+        - name: tipo
+          in: query
+          schema:
+            type: string
+          description: |
+            Filtro por tipo de jogo associado. Valores especiais usados por
+            submodules: `JB`, `QUI`, `SEN`, `LOT`, `BIL`.
+          example: JB
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/size"
+      responses:
+        "200":
+          description: Lista de extrações
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtracaoPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Extração]
+      summary: Criar extração
+      description: |
+        Cria a extração e dispara a trigger `trg_mv_cad_extracao_cria_sorteios`
+        que gera registros em `mov_sorteio` automaticamente.
+
+        Os campos de dias da semana são boolean (S/N) — o form PHP os converte
+        a partir de um CheckGroup de seleção múltipla.
+      operationId: extracao_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtracaoInput"
+      responses:
+        "201":
+          description: Extração criada e sorteios gerados via trigger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Extracao"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/extracaos/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+    get:
+      tags: [Extração]
+      summary: Obter extração por ID
+      operationId: extracao_get
+      responses:
+        "200":
+          description: Extração encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Extracao"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Extração]
+      summary: Atualizar extração
+      description: |
+        Atualiza a extração. A trigger recria os sorteios automaticamente
+        ao salvar se houver alteração nos dias ou hora_limite.
+      operationId: extracao_update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtracaoInput"
+      responses:
+        "200":
+          description: Extração atualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Extracao"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Extração]
+      summary: Excluir extração
+      operationId: extracao_delete
+      responses:
+        "204":
+          description: Extração excluída
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── MODALIDADE ──────────────────────────────────────────────────────────────
+
+  /api/modalidades:
+    get:
+      tags: [Modalidade]
+      summary: Listar modalidades
+      operationId: modalidade_list
+      parameters:
+        - name: descricao
+          in: query
+          schema:
+            type: string
+          description: Filtro LIKE em apresentacao
+        - name: jogo_id
+          in: query
+          schema:
+            type: integer
+          description: Filtrar por tipo de jogo
+        - name: ativo
+          in: query
+          schema:
+            type: string
+            enum: [S, N]
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/size"
+      responses:
+        "200":
+          description: Lista de modalidades
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModalidadePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Modalidade]
+      summary: Criar modalidade
+      description: |
+        Cada `int_jogo` pode ter no máximo uma modalidade. `ordem` é calculado
+        automaticamente como `MAX(ordem) + 1`. O `jogo_id` não pode ser
+        alterado após a criação.
+      operationId: modalidade_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModalidadeInput"
+      responses:
+        "201":
+          description: Modalidade criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Modalidade"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Tipo de jogo já possui uma modalidade
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/modalidades/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+    get:
+      tags: [Modalidade]
+      summary: Obter modalidade por ID
+      operationId: modalidade_get
+      responses:
+        "200":
+          description: Modalidade encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Modalidade"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Modalidade]
+      summary: Atualizar modalidade
+      description: O campo `jogo_id` é ignorado na atualização — não pode ser trocado.
+      operationId: modalidade_update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModalidadeInput"
+      responses:
+        "200":
+          description: Modalidade atualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Modalidade"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Modalidade]
+      summary: Excluir modalidade
+      operationId: modalidade_delete
+      responses:
+        "204":
+          description: Modalidade excluída
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── VENDEDOR ────────────────────────────────────────────────────────────────
+
+  /api/vendedors:
+    get:
+      tags: [Vendedor]
+      summary: Listar vendedores
+      description: |
+        O filtro de área respeita as permissões do usuário autenticado:
+        coletores/setoristas veem apenas as áreas vinculadas a eles;
+        admins veem todos.
+      operationId: vendedor_list
+      parameters:
+        - name: nome
+          in: query
+          schema:
+            type: string
+          description: Filtro LIKE em nome
+        - name: area_id
+          in: query
+          schema:
+            type: integer
+        - name: ativo
+          in: query
+          schema:
+            type: string
+            enum: [S, N]
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/size"
+      responses:
+        "200":
+          description: Lista de vendedores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendedorPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Vendedor]
+      summary: Criar vendedor
+      description: |
+        Cria simultaneamente um `SystemUser` e um `cad_vendedor` (Dual-Entity).
+        Requer `area_id` e `coletor_id` (setorista da área selecionada).
+        O `login` deve ser único no sistema.
+      operationId: vendedor_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VendedorInput"
+      responses:
+        "201":
+          description: Vendedor criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendedor"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Login já existe no sistema
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/vendedors/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+    get:
+      tags: [Vendedor]
+      summary: Obter vendedor por ID
+      operationId: vendedor_get
+      responses:
+        "200":
+          description: Vendedor encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendedor"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Vendedor]
+      summary: Atualizar vendedor
+      operationId: vendedor_update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VendedorInput"
+      responses:
+        "200":
+          description: Vendedor atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendedor"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Vendedor]
+      summary: Excluir vendedor
+      operationId: vendedor_delete
+      responses:
+        "204":
+          description: Vendedor excluído
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/vendedors/por-area/{areaId}:
+    get:
+      tags: [Vendedor]
+      summary: Listar vendedores por área
+      description: Endpoint AJAX usado pelos combos de relatórios ao trocar área.
+      operationId: vendedor_porArea
+      parameters:
+        - name: areaId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 2
+      responses:
+        "200":
+          description: Vendedores da área
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VendedorResumido"
+
+# ─── COMPONENTS ──────────────────────────────────────────────────────────────
+
+components:
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      example: 1
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 0
+      description: Página (base 0)
+    size:
+      name: size
+      in: query
+      schema:
+        type: integer
+        default: 10
+        enum: [10, 20, 50, 100, 1000]
+    sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+      description: Campo e direção (ex. descricao,asc)
+      example: "descricao,asc"
+
+  responses:
+    Unauthorized:
+      description: Não autenticado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Dados de entrada inválidos
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+
+  schemas:
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Registro não encontrado"
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Campos obrigatórios não preenchidos"
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            descricao: "Campo obrigatório"
+
+    # ── ÁREA ──
+
+    Area:
+      type: object
+      properties:
+        area_id:
+          type: integer
+          description: "PK — gerado via MAX+1"
+          example: 3
+        descricao:
+          type: string
+          example: "Zona Norte"
+        complemento:
+          type: string
+          nullable: true
+          example: "Setor A"
+        ativo:
+          type: string
+          enum: [S, N]
+          example: S
+
+    AreaInput:
+      type: object
+      required: [descricao]
+      properties:
+        descricao:
+          type: string
+          maxLength: 255
+          example: "Zona Norte"
+        complemento:
+          type: string
+          nullable: true
+          example: "Setor A"
+        ativo:
+          type: string
+          enum: [S, N]
+          default: S
+
+    AreaPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Area"
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+
+    # ── GERENTE ──
+
+    Gerente:
+      type: object
+      properties:
+        coletor_id:
+          type: integer
+          description: "PK — tabela cad_coletor"
+          example: 5
+        nome:
+          type: string
+          example: "Maria Souza"
+        area_id:
+          type: integer
+          example: 2
+        area_descricao:
+          type: string
+          example: "Zona Sul"
+        login:
+          type: string
+          example: "gerente.maria"
+        ativo:
+          type: string
+          enum: [S, N]
+          example: S
+        acesso_web:
+          type: string
+          enum: [S, N]
+          nullable: true
+          example: S
+
+    GerenteInput:
+      type: object
+      required: [nome, area_id, login]
+      properties:
+        nome:
+          type: string
+          example: "Maria Souza"
+        area_id:
+          type: integer
+          example: 2
+        login:
+          type: string
+          example: "gerente.maria"
+        password:
+          type: string
+          format: password
+          description: "Obrigatório na criação. MD5 sem salt (lacuna de segurança — corrigir para bcrypt)."
+          example: "senha123"
+        repassword:
+          type: string
+          format: password
+          description: Confirmação de senha — deve ser igual a password
+          example: "senha123"
+        ativo:
+          type: string
+          enum: [S, N]
+          default: S
+
+    GerentePage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Gerente"
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    # ── EXTRAÇÃO ──
+
+    Extracao:
+      type: object
+      properties:
+        extracao_id:
+          type: integer
+          example: 5
+        descricao:
+          type: string
+          example: "TARDE"
+        descricao_mobile:
+          type: string
+          example: "TRD"
+        hora_limite:
+          type: string
+          example: "18:00"
+        premiacao_maxima:
+          type: integer
+          description: Número máximo de colocações premiadas exibidas (1–10)
+          example: 5
+        dia_sorteio_inicial:
+          type: string
+          format: date
+          example: "2026-01-01"
+        calculo_id:
+          type: integer
+          nullable: true
+          description: FK para int_calculo_sorteio (algoritmo de geração de resultado)
+          example: 1
+        segunda:
+          type: string
+          enum: [S, N]
+          example: S
+        terca:
+          type: string
+          enum: [S, N]
+          example: S
+        quarta:
+          type: string
+          enum: [S, N]
+          example: S
+        quinta:
+          type: string
+          enum: [S, N]
+          example: S
+        sexta:
+          type: string
+          enum: [S, N]
+          example: S
+        sabado:
+          type: string
+          enum: [S, N]
+          example: N
+        domingo:
+          type: string
+          enum: [S, N]
+          example: N
+        ativo:
+          type: string
+          enum: [S, N]
+          example: S
+        filtro_banca:
+          type: integer
+          description: Sempre 1 — fixado pelo sistema
+          example: 1
+
+    ExtracaoInput:
+      type: object
+      required: [descricao, descricao_mobile, hora_limite, premiacao_maxima, dia_sorteio_inicial]
+      properties:
+        descricao:
+          type: string
+          example: "TARDE"
+        descricao_mobile:
+          type: string
+          example: "TRD"
+        hora_limite:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          example: "18:00"
+        premiacao_maxima:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 5
+        dia_sorteio_inicial:
+          type: string
+          format: date
+          example: "2026-01-01"
+        calculo_id:
+          type: integer
+          nullable: true
+          example: 1
+        segunda:
+          type: string
+          enum: [S, N]
+          default: N
+        terca:
+          type: string
+          enum: [S, N]
+          default: N
+        quarta:
+          type: string
+          enum: [S, N]
+          default: N
+        quinta:
+          type: string
+          enum: [S, N]
+          default: N
+        sexta:
+          type: string
+          enum: [S, N]
+          default: N
+        sabado:
+          type: string
+          enum: [S, N]
+          default: N
+        domingo:
+          type: string
+          enum: [S, N]
+          default: N
+        ativo:
+          type: string
+          enum: [S, N]
+          default: S
+
+    ExtracaoPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Extracao"
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    # ── MODALIDADE ──
+
+    Modalidade:
+      type: object
+      properties:
+        modalidade_id:
+          type: integer
+          example: 1
+        jogo_id:
+          type: integer
+          description: FK para int_jogo — não alterável após criação
+          example: 10
+        jogo_descricao:
+          type: string
+          description: Descrição do tipo de jogo (leitura)
+          example: "Milhar"
+        apresentacao:
+          type: string
+          example: "MIL"
+        ordem:
+          type: integer
+          description: Calculado automaticamente (MAX+1)
+          example: 1
+        multiplicador:
+          type: number
+          format: double
+          description: Cotação base da modalidade
+          example: 6000.0
+        multiplicador_colocacao_01:
+          type: number
+          format: double
+          nullable: true
+          example: 6000.0
+        multiplicador_colocacao_02:
+          type: number
+          format: double
+          nullable: true
+          example: 3000.0
+        multiplicador_colocacao_03:
+          type: number
+          format: double
+          nullable: true
+          example: 2000.0
+        multiplicador_colocacao_04:
+          type: number
+          format: double
+          nullable: true
+          description: Disponível para Milhar Premiada — ausente no form atual (lacuna)
+          example: 1500.0
+        multiplicador_colocacao_05:
+          type: number
+          format: double
+          nullable: true
+          description: Disponível para Milhar Premiada — ausente no form atual (lacuna)
+          example: 1000.0
+        limite_palpite:
+          type: number
+          format: double
+          nullable: true
+          example: 500.0
+        limite_descarga:
+          type: number
+          format: double
+          nullable: true
+          example: 10000.0
+        limite_aceite:
+          type: number
+          format: double
+          nullable: true
+          example: null
+        ativo:
+          type: string
+          enum: [S, N]
+          example: S
+
+    ModalidadeInput:
+      type: object
+      required: [jogo_id, apresentacao, multiplicador]
+      properties:
+        jogo_id:
+          type: integer
+          description: Apenas na criação — ignorado na atualização
+          example: 10
+        apresentacao:
+          type: string
+          example: "MIL"
+        multiplicador:
+          type: number
+          format: double
+          example: 6000.0
+        multiplicador_colocacao_01:
+          type: number
+          format: double
+          nullable: true
+        multiplicador_colocacao_02:
+          type: number
+          format: double
+          nullable: true
+        multiplicador_colocacao_03:
+          type: number
+          format: double
+          nullable: true
+        multiplicador_colocacao_04:
+          type: number
+          format: double
+          nullable: true
+        multiplicador_colocacao_05:
+          type: number
+          format: double
+          nullable: true
+        limite_palpite:
+          type: number
+          format: double
+          nullable: true
+        limite_descarga:
+          type: number
+          format: double
+          nullable: true
+        limite_aceite:
+          type: number
+          format: double
+          nullable: true
+        ativo:
+          type: string
+          enum: [S, N]
+          default: S
+
+    ModalidadePage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Modalidade"
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    # ── VENDEDOR ──
+
+    Vendedor:
+      type: object
+      properties:
+        vendedor_id:
+          type: integer
+          example: 1
+        nome:
+          type: string
+          example: "João Silva"
+        area_id:
+          type: integer
+          example: 2
+        area_descricao:
+          type: string
+          example: "Zona Sul"
+        coletor_id:
+          type: integer
+          description: FK para cad_coletor (gerente/setorista)
+          example: 3
+        login:
+          type: string
+          example: "vendedor.joao"
+        comissao:
+          type: number
+          format: double
+          description: Percentual de comissão
+          example: 5.0
+        limite_venda:
+          type: number
+          format: double
+          example: 500.0
+        pode_cancelar:
+          type: string
+          enum: [S, N]
+          example: N
+        pode_cancelar_tempo:
+          type: string
+          nullable: true
+          example: "00:30:00"
+        pode_cancelar_qtde:
+          type: integer
+          example: 0
+        pode_pagar:
+          type: string
+          enum: [S, N]
+          example: S
+        pode_pagar_outro:
+          type: string
+          enum: [S, N]
+          example: N
+        pode_reimprimir:
+          type: string
+          enum: [S, N]
+          example: N
+        pode_reimprimir_qtde:
+          type: integer
+          example: 0
+        pode_reimprimir_tempo:
+          type: string
+          nullable: true
+          example: "00:00:00"
+        exibe_premiacao:
+          type: string
+          enum: [S, N, U]
+          description: "S=sempre, N=nunca, U=último sorteio"
+          example: S
+        exibe_comissao:
+          type: string
+          enum: [S, N]
+          example: S
+        ativo:
+          type: string
+          enum: [S, N]
+          example: S
+        treinamento:
+          type: string
+          enum: [S, N]
+          example: N
+
+    VendedorInput:
+      type: object
+      required: [nome, area_id, coletor_id, login, comissao, limite_venda]
+      properties:
+        nome:
+          type: string
+          example: "João Silva"
+        area_id:
+          type: integer
+          example: 2
+        coletor_id:
+          type: integer
+          description: Gerente/setorista da área — obrigatório
+          example: 3
+        login:
+          type: string
+          example: "vendedor.joao"
+        password:
+          type: string
+          format: password
+          description: Obrigatório na criação. MD5 sem salt (lacuna de segurança).
+          example: "senha123"
+        repassword:
+          type: string
+          format: password
+          example: "senha123"
+        comissao:
+          type: number
+          format: double
+          example: 5.0
+        limite_venda:
+          type: number
+          format: double
+          example: 500.0
+        pode_cancelar:
+          type: string
+          enum: [S, N]
+          default: N
+        pode_cancelar_tempo:
+          type: string
+          nullable: true
+          example: "00:30:00"
+        pode_cancelar_qtde:
+          type: integer
+          default: 0
+        pode_pagar:
+          type: string
+          enum: [S, N]
+          default: S
+        pode_pagar_outro:
+          type: string
+          enum: [S, N]
+          default: N
+        pode_reimprimir:
+          type: string
+          enum: [S, N]
+          default: N
+        pode_reimprimir_qtde:
+          type: integer
+          default: 0
+        pode_reimprimir_tempo:
+          type: string
+          nullable: true
+          example: "00:00:00"
+        exibe_premiacao:
+          type: string
+          enum: [S, N, U]
+          default: S
+        exibe_comissao:
+          type: string
+          enum: [S, N]
+          default: S
+        ativo:
+          type: string
+          enum: [S, N]
+          default: S
+        treinamento:
+          type: string
+          enum: [S, N]
+          default: N
+        cep:
+          type: string
+          nullable: true
+        rua:
+          type: string
+          nullable: true
+        numero:
+          type: string
+          nullable: true
+        bairro:
+          type: string
+          nullable: true
+        cidade:
+          type: string
+          nullable: true
+        uf:
+          type: string
+          nullable: true
+          maxLength: 2
+          example: SP
+
+    VendedorResumido:
+      type: object
+      description: Projeção usada em combos de relatório (AJAX por área)
+      properties:
+        vendedor_id:
+          type: integer
+          example: 1
+        nome:
+          type: string
+          example: "João Silva"
+
+    VendedorPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Vendedor"
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer

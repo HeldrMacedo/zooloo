@@ -128,19 +128,22 @@ class GerenteForm extends TPage
             {
                 if( $object->password !== $param['repassword'] )
                     throw new Exception(_t('The passwords do not match'));
-                
-                $object->password = md5($object->password);
+
+                $plainPassword = $object->password;
 
                 if ($object->id)
                 {
-                    SystemUserOldPassword::validate($object->id, $object->password);
+                    SystemUserOldPassword::validate($object->id, $plainPassword);
                 }
+
+                $object->password = password_hash($plainPassword, PASSWORD_BCRYPT);
             }
             else
             {
                 unset($object->password);
+                $plainPassword = null;
             }
-            
+
             $object->store();
 
             $userGerente = $object->getUserGerenteForUser();
@@ -159,9 +162,9 @@ class GerenteForm extends TPage
                 $userGerente->store();
             }
 
-            if ($object->password)
+            if (!empty($plainPassword))
             {
-                SystemUserOldPassword::register($object->id, $object->password);
+                SystemUserOldPassword::register($object->id, $plainPassword);
             }
             $object->clearParts();
 
@@ -169,7 +172,7 @@ class GerenteForm extends TPage
 
             $data = new stdClass;
             $data->id = $object->id;
-            TForm::sendData('form_ferente', $data);
+            TForm::sendData('form_gerente', $data);
 
             TTransaction::close();
             $pos_action = new TAction(['GerenteList', 'onReload']);

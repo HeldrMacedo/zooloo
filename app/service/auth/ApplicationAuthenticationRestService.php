@@ -185,7 +185,15 @@ class ApplicationAuthenticationRestService implements AdiantiRestService
             
             // Decodificar token atual
             $decoded = (array) JWT::decode($param['token'], new Key($key, 'HS256'));
-            
+
+            if ($decoded['expires'] < time())
+            {
+                return array(
+                    'success' => false,
+                    'message' => 'Token expirado. Faça login novamente.'
+                );
+            }
+
             // Criar novo token com nova expiração
             $new_token_payload = array(
                 "user" => $decoded['user'],

@@ -1,0 +1,157 @@
+{
+  "version": "1.2.14",
+  "project": "zooloo",
+  "user_name": "helder",
+  "chat_language": "pt-br",
+  "doc_language": "Português",
+  "answer_mode": "chat",
+  "doc_level": "completo",
+  "output_folder": "_reversa_sdd",
+  "phase": "revisao",
+  "redator_progress": "46/46",
+  "reviewer_progress": "concluido",
+  "completed": [
+    "reconhecimento",
+    "escavacao",
+    "interpretacao",
+    "geracao",
+    "revisao"
+  ],
+  "pending": [],
+  "checkpoints": {
+    "reconhecimento": {
+      "completed_at": "2026-04-30",
+      "agent": "reversa-scout",
+      "artifacts": [
+        "_reversa_sdd/inventory.md",
+        "_reversa_sdd/dependencies.md",
+        ".reversa/context/surface.json"
+      ],
+      "summary": "18 módulos identificados, 207 arquivos PHP, Adianti 8.1, PostgreSQL 15, 19 entidades de negócio, 10 REST services"
+    },
+    "escavacao": {
+      "completed_at": "2026-04-30",
+      "agent": "reversa-archaeologist",
+      "artifacts": [
+        "_reversa_sdd/code-analysis.md",
+        "_reversa_sdd/data-dictionary.md",
+        "_reversa_sdd/flowcharts/area.md",
+        "_reversa_sdd/flowcharts/gerente.md",
+        "_reversa_sdd/flowcharts/extracao.md",
+        "_reversa_sdd/flowcharts/modalidade.md",
+        "_reversa_sdd/flowcharts/vendedor.md",
+        "_reversa_sdd/flowcharts/area-cotacao.md",
+        "_reversa_sdd/flowcharts/area-extracao.md",
+        "_reversa_sdd/flowcharts/area-limite.md",
+        "_reversa_sdd/flowcharts/area-comissao-modalidade.md",
+        "_reversa_sdd/flowcharts/extracao-descarga.md",
+        "_reversa_sdd/flowcharts/palpite-cotado.md",
+        "_reversa_sdd/flowcharts/parametros.md",
+        "_reversa_sdd/flowcharts/resultado.md",
+        "_reversa_sdd/flowcharts/rest-api.md",
+        ".reversa/context/modules.json"
+      ],
+      "summary": "14 módulos analisados, 19 entidades documentadas, 2 bugs confirmados (typos GerenteForm+ExtracaoForm), 1 vulnerabilidade de segurança (MD5 sem salt), 1 lacuna crítica (cfg_extracao_modalidade sem Active Record), algoritmo Jogo do Bicho grupos documentado"
+    },
+    "interpretacao": {
+      "completed_at": "2026-04-30",
+      "agent": "reversa-detective + reversa-architect",
+      "artifacts": [
+        "_reversa_sdd/domain.md",
+        "_reversa_sdd/state-machines.md",
+        "_reversa_sdd/permissions.md",
+        "_reversa_sdd/adrs/001-reescrita-java-para-php.md",
+        "_reversa_sdd/adrs/002-jwt-para-api-movel.md",
+        "_reversa_sdd/adrs/003-md5-para-senhas.md",
+        "_reversa_sdd/adrs/004-trigger-para-calculo-premios.md",
+        "_reversa_sdd/adrs/005-insert-delete-para-area-extracao.md",
+        "_reversa_sdd/adrs/006-dual-entity-usuario-gerente-vendedor.md",
+        "_reversa_sdd/c4-context.md",
+        "_reversa_sdd/c4-containers.md",
+        "_reversa_sdd/c4-components.md",
+        "_reversa_sdd/erd-complete.md",
+        "_reversa_sdd/architecture.md",
+        "_reversa_sdd/traceability/spec-impact-matrix.md"
+      ],
+      "summary": "25 regras de negócio documentadas, 6 ADRs retroativos gerados, 6 máquinas de estado mapeadas, diagrama C4 completo (contexto/containers/componentes), ERD com 19 entidades e cardinalidades, Spec Impact Matrix com 5 cenários de alto risco"
+    },
+    "geracao": {
+      "completed_at": "2026-05-01",
+      "agent": "reversa-writer",
+      "artifacts": [
+        "_reversa_sdd/openapi/spec-resultado.yaml",
+        "_reversa_sdd/openapi/spec-descarrego.yaml",
+        "_reversa_sdd/openapi/spec-relatorios-vendas.yaml",
+        "_reversa_sdd/openapi/spec-relatorios-financeiros.yaml",
+        "_reversa_sdd/openapi/spec-jogos-especiais.yaml",
+        "_reversa_sdd/user-stories/us-cadastros.md",
+        "_reversa_sdd/user-stories/us-configuracoes.md",
+        "_reversa_sdd/user-stories/us-resultado-sorteio.md",
+        "_reversa_sdd/user-stories/us-operacional.md",
+        "_reversa_sdd/user-stories/us-app-movel.md",
+        "_reversa_sdd/user-stories/us-jogos-especiais.md",
+        "_reversa_sdd/traceability/code-spec-matrix.md"
+      ],
+      "summary": "46/46 itens gerados: 5 specs OpenAPI 3.0.3 (resultado, descarrego, relatórios-vendas, relatórios-financeiros, jogos-especiais), 6 arquivos de user stories (cadastros, configurações, resultado-sorteio, operacional, app-movel, jogos-especiais), 1 matriz de rastreabilidade código-spec. 11 lacunas críticas documentadas, 2 bugs confirmados no código, 3 vulnerabilidades de segurança."
+    },
+    "revisao": {
+      "completed_at": "2026-05-01",
+      "agent": "reversa-reviewer",
+      "artifacts": [
+        "_reversa_sdd/questions.md",
+        "_reversa_sdd/gaps.md",
+        "_reversa_sdd/confidence-report.md"
+      ],
+      "summary": "Revisão cruzada concluída. 23 reclassificações totais (6 por análise de código + 17 por respostas do usuário). Confiança geral: 68% → 75%. 17 gaps identificados (8 críticos, 6 moderados, 3 cosméticos). 4 triggers não documentadas descobertas e adicionadas ao flowcharts/rest-api.md. ADR-003 atualizado com decisão de migração para bcrypt. Grade de Comissão promovida de Won't → Should. API contract do BilheteRestService corrigida. 8 itens de backlog identificados para implementação."
+    }
+  },
+  "engines": [
+    "claude-code"
+  ],
+  "agents": [
+    "reversa",
+    "reversa-scout",
+    "reversa-archaeologist",
+    "reversa-detective",
+    "reversa-architect",
+    "reversa-writer",
+    "reversa-reviewer",
+    "reversa-visor",
+    "reversa-data-master",
+    "reversa-design-system",
+    "reversa-agents-help",
+    "reversa-reconstructor"
+  ],
+  "created_files": [
+    ".claude\\skills\\reversa",
+    ".agents\\skills\\reversa",
+    ".claude\\skills\\reversa-scout",
+    ".agents\\skills\\reversa-scout",
+    ".claude\\skills\\reversa-archaeologist",
+    ".agents\\skills\\reversa-archaeologist",
+    ".claude\\skills\\reversa-detective",
+    ".agents\\skills\\reversa-detective",
+    ".claude\\skills\\reversa-architect",
+    ".agents\\skills\\reversa-architect",
+    ".claude\\skills\\reversa-writer",
+    ".agents\\skills\\reversa-writer",
+    ".claude\\skills\\reversa-reviewer",
+    ".agents\\skills\\reversa-reviewer",
+    ".claude\\skills\\reversa-visor",
+    ".agents\\skills\\reversa-visor",
+    ".claude\\skills\\reversa-data-master",
+    ".agents\\skills\\reversa-data-master",
+    ".claude\\skills\\reversa-design-system",
+    ".agents\\skills\\reversa-design-system",
+    ".claude\\skills\\reversa-agents-help",
+    ".agents\\skills\\reversa-agents-help",
+    ".claude\\skills\\reversa-reconstructor",
+    ".agents\\skills\\reversa-reconstructor",
+    ".reversa\\state.json",
+    ".reversa\\config.toml",
+    ".reversa\\config.user.toml",
+    ".reversa\\plan.md",
+    ".reversa\\version",
+    ".reversa\\_config\\manifest.yaml"
+  ]
+}

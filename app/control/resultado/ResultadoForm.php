@@ -377,7 +377,13 @@ class ResultadoForm extends TPage
             if ($sorteio->situacao != 'A') {
                 throw new Exception('Este sorteio já foi encerrado e não pode ser modificado.');
             }
-            
+
+            // Valida hora_sorteio — resultado só pode ser lançado após a hora do sorteio
+            $hora_sorteio = $sorteio->hora_sorteio;
+            if (!empty($hora_sorteio) && date('H:i:s') < $hora_sorteio) {
+                throw new Exception("O sorteio só pode ser lançado após às {$hora_sorteio}");
+            }
+
             // Usa o campo de texto como fonte principal
             $numeros_string = trim($data->numeros_sorteados ?? '');
             

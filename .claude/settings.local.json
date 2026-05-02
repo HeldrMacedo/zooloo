@@ -4,7 +4,8 @@
       "Bash(docker exec *)",
       "Bash(awk '{print $NF}')",
       "Bash(npm view *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(xargs ls *)"
     ]
   }
 }

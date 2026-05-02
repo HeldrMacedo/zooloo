@@ -53,12 +53,30 @@ class ResultadoList extends TStandardList
         
         // Campos de busca
         $data_sorteio = new TDate('data_sorteio');
-        $extracao_id = new TDBCombo('extracao_id', 'permission', 'Extracao', 'extracao_id', 'descricao');
-        
+        $extracao_id = new TCombo('extracao_id');
+        $extracao_id->enableSearch();
+
+        // Popula extração apenas com sorteios abertos no dia atual (vw_sorteio)
+        try {
+            TTransaction::open('permission');
+            $conn = TTransaction::get();
+            $rows = $conn->query(
+                "SELECT DISTINCT extracao_id, descricao FROM vw_sorteio " .
+                "WHERE data_sorteio = CURRENT_DATE AND situacao = 'A' " .
+                "ORDER BY descricao"
+            );
+            $opcoes = [];
+            foreach ($rows as $row) {
+                $opcoes[$row['extracao_id']] = $row['descricao'];
+            }
+            TTransaction::close();
+            $extracao_id->addItems($opcoes);
+        } catch (Exception $e) {
+            TTransaction::rollback();
+        }
+
         $data_sorteio->setMask('dd/mm/yyyy');
         $data_sorteio->setDatabaseMask('yyyy-mm-dd');
-        
-        $extracao_id->enableSearch();
         //$extracao_id->setDefaultOption(false);
         
         // Adiciona os campos ao formulário

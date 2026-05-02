@@ -1,0 +1,770 @@
+openapi: 3.0.3
+info:
+  title: Zooloo — Relatórios de Vendas
+  description: |
+    APIs de consulta e relatório de vendas do sistema de banca — bilhetes individuais,
+    sorteios consolidados, vendas por vendedor e por área.
+
+    ## Módulos cobertos
+
+    | Módulo Java | Título na tela | Endpoint principal |
+    |---|---|---|
+    | `vendasjb` | Consulta de Vendas | `GET api/rel-vendasjb` |
+    | `vendas-por-sorteio` | Vendas por Sorteio (Aberto) | `GET api/vendasorteio` |
+    | `apuracaojb` | Apuração (JB) | `GET api/apuracaojb` |
+    | `apuracao` | Apuração (Bilhetinho) | `GET api/apuracao` |
+    | `geral-venda-modalidade` | Mov. Geral Vendas Vendedor | `GET api/geralvendamodalidade` 🟡 |
+    | `geral-vendas-area` | Mov. Geral Vendas Área | `GET api/geralvendasarea` 🟡 |
+
+    ## Restrições de acesso (comuns a todos os módulos)
+
+    - **Gerentes/coletores/setoristas:** veem apenas dados de sua área
+    - **Admin:** vê todas as áreas; combo de área inclui opção "TODAS"
+    - Filtros por data são client-side preenchidos com data atual por padrão
+
+    ## Combo Tipo dinâmico (`loadParametro()`)
+
+    Presente nos módulos `vendasjb` e `geral-venda-modalidade`:
+    - Lê `cfg_parametros` e exibe apenas jogos com flag ativo (`ativo_jb`, `ativo_quininha`,
+      `ativo_seninha`, `ativo_bilhetinho`)
+    - Se apenas 1 jogo ativo: combo fica oculto (`desativarCombo=true`) e o ID é passado
+      automaticamente no filtro
+
+    ## Escala de confiança
+    🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
+
+    > **GAP no Zooloo:** Todos esses módulos estão ausentes no PHP atual.
+    > Ver `gap-relatorios-vendas.md` e `gap-relatorios-operacionais.md` para detalhes.
+  version: "1.0.0"
+  contact:
+    name: Projeto Zooloo — Reversa Framework
+
+servers:
+  - url: http://localhost
+    description: Ambiente local (Docker)
+
+tags:
+  - name: Consulta de Vendas
+    description: Bilhetes individuais com filtros avançados e modo NSU
+  - name: Vendas por Sorteio
+    description: Sorteios consolidados com totais (auto-carrega, sem filtros de usuário)
+  - name: Apuração
+    description: Listagem de apostas realizadas por sorteio (JB e Bilhetinho)
+  - name: Vendas por Vendedor e Área
+    description: Totais de vendas agrupados por vendedor ou por área no período
+
+paths:
+
+  # ─── CONSULTA DE VENDAS (vendasjb) ───────────────────────────────────────────
+
+  /api/rel-vendasjb:
+    get:
+      tags:
+        - Consulta de Vendas
+      summary: Listar bilhetes com filtros avançados
+      description: |
+        Lista bilhetes de JB (e opcionalmente outros tipos via combo Tipo) com 8 filtros.
+        Usado no modo padrão (sem NSU).
+
+        **Totalização no rodapé** (calculada no frontend, excluindo cancelados):
+        - `comissaoTotal = SUM(comissao_sorteio)` onde `situacao != 'CANCELADO'`
+        - `total = SUM(total_sorteio)` onde `situacao != 'CANCELADO'`
+        - `previsaoPremio = SUM(previsao_premio)` onde `situacao != 'CANCELADO'`
+
+        **NSU exibido** com 6 dígitos com zeros à esquerda: `("000000" + nsu).slice(-6)`
+
+        🟢 CONFIRMADO — via vendasjb.service.ts (query method)
+      operationId: listarVendasJb
+      parameters:
+        - name: datainicio
+          in: query
+          required: false
+          description: Data inicial (yyyy-MM-dd). Padrão implícito: data atual.
+          schema:
+            type: string
+            format: date
+            example: "2026-05-01"
+        - name: datafim
+          in: query
+          required: false
+          description: Data final (yyyy-MM-dd). Padrão implícito: data atual.
+          schema:
+            type: string
+            format: date
+            example: "2026-05-01"
+        - name: combo
+          in: query
+          required: false
+          description: |
+            ID do tipo de jogo (do combo Tipo gerado via `cfg_parametros`).
+            Omitir = todos os tipos ativos.
+          schema:
+            type: integer
+            example: 1
+        - name: area
+          in: query
+          required: false
+          description: |
+            ID da área. Obrigatório para gerentes/coletores — opcional para admin.
+            Admin pode omitir ou usar "TODAS".
+          schema:
+            type: integer
+            example: 2
+        - name: extracao
+          in: query
+          required: false
+          description: ID da extração. Omitir = todas.
+          schema:
+            type: integer
+            example: 3
+        - name: vendedor
+          in: query
+          required: false
+          description: ID do vendedor. Omitir = todos. Recarregado via AJAX ao mudar área.
+          schema:
+            type: integer
+            example: 10
+        - name: situacao
+          in: query
+          required: false
+          description: Filtrar por situação do bilhete
+          schema:
+            type: string
+            enum: ["TODOS", "ATIVO", "CANCELADO"]
+            example: "ATIVO"
+        - name: valormin
+          in: query
+          required: false
+          description: Filtrar bilhetes com `total_sorteio >= valormin`
+          schema:
+            type: number
+            format: double
+            example: 10.00
+      responses:
+        "200":
+          description: Lista de bilhetes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VendaJbItem"
+              example:
+                - nsu: 123456
+                  data_hora: "01/05/2026 14:30:00"
+                  vendedor: "João Silva"
+                  apresentacao: "Milhar"
+                  situacao: "ATIVO"
+                  extracao: "Tarde"
+                  comissao_sorteio: 5.00
+                  total_sorteio: 50.00
+                  previsao_premio: 2000.00
+        "422":
+          description: Área não selecionada (gerente sem área)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                status: 422
+                message: "Selecione uma área!"
+
+  /api/vendasnsu/{nsu}:
+    get:
+      tags:
+        - Consulta de Vendas
+      summary: Buscar bilhete por NSU
+      description: |
+        Modo NSU — busca exclusiva de um bilhete específico.
+
+        **Comportamento no frontend ao usar este modo:**
+        - Todos os outros campos de filtro são desabilitados (`desativarCampos()`)
+        - Botão "Buscar" some; botão "Buscar Nsu" aparece
+        - Ao apagar o NSU: retorna ao modo normal de filtros
+
+        🟢 CONFIRMADO — via vendasjb.service.ts (queryNsu method)
+      operationId: buscarPorNsu
+      parameters:
+        - name: nsu
+          in: path
+          required: true
+          description: NSU do bilhete (número inteiro)
+          schema:
+            type: integer
+            example: 123456
+      responses:
+        "200":
+          description: Bilhete encontrado
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VendaJbItem"
+        "404":
+          description: NSU não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/vendas-detalhe/{nsu}:
+    get:
+      tags:
+        - Consulta de Vendas
+      summary: Detalhe completo do bilhete (popup)
+      description: |
+        Retorna todos os dados de um bilhete para exibição em popup.
+        Aberto ao clicar no link do NSU na listagem (target: `vendasjb/{nsu}/view`).
+
+        Inclui dados do bilhete + palpites individuais + resultado de cada sorteio.
+
+        🟡 INFERIDO — endpoint referenciado no HTML do vendasjb mas não lido na íntegra
+      operationId: detalharBilhete
+      parameters:
+        - name: nsu
+          in: path
+          required: true
+          description: NSU do bilhete
+          schema:
+            type: integer
+            example: 123456
+      responses:
+        "200":
+          description: Detalhe completo do bilhete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendaDetalhe"
+        "404":
+          description: Bilhete não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/vendasjb-cancelamento/{nsu}:
+    put:
+      tags:
+        - Consulta de Vendas
+      summary: Cancelar bilhete
+      description: |
+        Cancela um bilhete pelo NSU. Acessível via popup de detalhe.
+
+        Após cancelar, o bilhete permanece na listagem com `situacao='CANCELADO'` mas
+        é excluído da totalização do rodapé.
+
+        🟢 CONFIRMADO — via vendasjb.service.ts (cancel method)
+      operationId: cancelarBilhete
+      parameters:
+        - name: nsu
+          in: path
+          required: true
+          description: NSU do bilhete a cancelar
+          schema:
+            type: integer
+            example: 123456
+      responses:
+        "200":
+          description: Bilhete cancelado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelamentoResponse"
+              example:
+                nsu: 123456
+                situacao: "CANCELADO"
+                message: "Bilhete cancelado com sucesso"
+        "404":
+          description: Bilhete não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Bilhete já cancelado ou sorteio encerrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  # ─── VENDAS POR SORTEIO ──────────────────────────────────────────────────────
+
+  /api/vendasorteio:
+    get:
+      tags:
+        - Vendas por Sorteio
+      summary: Listar sorteios com totais de vendas (auto-carrega)
+      description: |
+        Retorna todos os sorteios (abertos e fechados recentes) com totais financeiros.
+        **Não aceita filtros de usuário** — carrega automaticamente ao acessar a tela.
+
+        **Status "EXPIRADO"** calculado no frontend (não vem da API):
+        ```
+        if (hora_sorteio < new Date()) → status = "EXPIRADO", classe CSS = "disabled"
+        ```
+
+        A lista recarrega ao receber evento `vendaSorteioListModification` (ex: após
+        registrar resultado).
+
+        🟡 INFERIDO — endpoint referenciado no service mas sem leitura do response type completo
+      operationId: listarVendasPorSorteio
+      responses:
+        "200":
+          description: Lista de sorteios com totais
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VendaSorteioItem"
+              example:
+                - sorteio_numero: 1001
+                  descricao: "Tarde"
+                  data_sorteio: "2026-05-01"
+                  hora: "16:00:00"
+                  total_sorteio: 5000.00
+                  comissao: 500.00
+                  liquido: 4500.00
+                - sorteio_numero: 1000
+                  descricao: "Federal"
+                  data_sorteio: "2026-05-01"
+                  hora: "14:00:00"
+                  total_sorteio: 3200.00
+                  comissao: 320.00
+                  liquido: 2880.00
+
+  # ─── APURAÇÃO ────────────────────────────────────────────────────────────────
+
+  /api/apuracaojb:
+    get:
+      tags:
+        - Apuração
+      summary: Apuração JB — apostas por sorteio
+      description: |
+        Lista apostas de Jogo do Bicho realizadas para uma data/área/extração específica.
+        Mostra detalhes de cada bilhete: NSU, Poule, Vendedor, Data, Extração, Palpites, Total.
+
+        **Palpites** vêm do backend como CSV (`"1234,5678"`) e são processados no frontend:
+        ```
+        palpites.split(',').join(' ')  → "1234 5678"
+        ```
+
+        **Restrição de área:** coletor/setorista restrito à sua área — diferente da Apuração
+        Bilhetinho que não tem restrição de área.
+
+        **Totalização:** `SUM(total_sorteio)` exibida em célula única `colspan=7` no rodapé.
+
+        **NSU e Poule** formatados com 6 dígitos: `("000000" + value).slice(-6)`
+
+        **Bug de janeiro:** corrigido neste módulo (diferente da apuração Bilhetinho).
+
+        🟢 CONFIRMADO — via apuracaojb.component.ts
+      operationId: apuracaoJb
+      parameters:
+        - name: data
+          in: query
+          required: false
+          description: Data do sorteio (`yyyy-MM-dd`)
+          schema:
+            type: string
+            format: date
+            example: "2026-05-01"
+        - name: area
+          in: query
+          required: false
+          description: ID da área. Obrigatório para coletor/setorista.
+          schema:
+            type: integer
+            example: 2
+        - name: extracao
+          in: query
+          required: false
+          description: ID da extração
+          schema:
+            type: integer
+            example: 3
+      responses:
+        "200":
+          description: Lista de apostas para o sorteio
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApuracaoItem"
+              example:
+                - nsu: 123456
+                  poule: 789012
+                  vendedor: "João Silva"
+                  data_hora: "01/05/2026 14:30:00"
+                  extracao: "Tarde"
+                  palpites: "1234,5678"
+                  total_sorteio: 50.00
+
+  /api/apuracao:
+    get:
+      tags:
+        - Apuração
+      summary: Apuração Bilhetinho — apostas por sorteio
+      description: |
+        Lista apostas de Bilhetinho para uma data/extração. Mesmas colunas que a apuração JB.
+
+        **Diferenças em relação à apuração JB:**
+        - **Sem restrição de área** — todos os perfis (incluindo coletor/setorista) veem todas as áreas
+        - **Bug de janeiro presente:** o cálculo de `diaAtual` usa if/else legado com `getMonth()===0`
+          que pode gerar data incorreta em Janeiro
+        - Extração carregada via `extracaoService.queryBilhetinho()` — somente extrações Bilhetinho
+        - Rodapé: `<td colspan="6">Total</td><td>{{ total | currency }}</td>` (2 células separadas,
+          diferente do JB que usa 1 célula com colspan=7)
+
+        🟢 CONFIRMADO — via apuracao.component.ts
+      operationId: apuracaoBilhetinho
+      parameters:
+        - name: data
+          in: query
+          required: false
+          description: Data do sorteio (`yyyy-MM-dd`)
+          schema:
+            type: string
+            format: date
+            example: "2026-05-01"
+        - name: extracao
+          in: query
+          required: false
+          description: ID da extração Bilhetinho
+          schema:
+            type: integer
+            example: 5
+      responses:
+        "200":
+          description: Lista de apostas Bilhetinho para o sorteio
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApuracaoItem"
+
+  # ─── VENDAS POR VENDEDOR E POR ÁREA ──────────────────────────────────────────
+
+  /api/geralvendamodalidade:
+    get:
+      tags:
+        - Vendas por Vendedor e Área
+      summary: Movimento Geral Vendas por Vendedor
+      description: |
+        Retorna total apostado por vendedor no período, opcionalmente filtrado por modalidade.
+        Tela simples — sem detalhamento de bilhetes individuais.
+
+        **Módulo Java:** `geral-venda-modalidade`
+
+        🟡 INFERIDO — endpoint baseado no padrão de nomenclatura do sistema; não lido diretamente
+      operationId: geralVendaModalidade
+      parameters:
+        - name: dataInicial
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-05-01"
+        - name: dataFinal
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-05-01"
+        - name: area
+          in: query
+          required: false
+          description: ID da área. Obrigatório para gerentes.
+          schema:
+            type: integer
+            example: 2
+        - name: modalidade
+          in: query
+          required: false
+          description: ID da modalidade. Omitir = todas.
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: Totais de vendas por vendedor
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VendaVendedorItem"
+              example:
+                - vendedor: "João Silva"
+                  total: 2500.00
+                - vendedor: "Maria Santos"
+                  total: 1800.00
+
+  /api/geralvendasarea:
+    get:
+      tags:
+        - Vendas por Vendedor e Área
+      summary: Movimento Geral Vendas por Área
+      description: |
+        Retorna total apostado por área no período. **Não tem filtro por área** — exibe
+        o comparativo entre todas as áreas simultaneamente.
+
+        **Módulo Java:** `geral-vendas-area`
+
+        🟡 INFERIDO — endpoint baseado no padrão de nomenclatura; não lido diretamente
+      operationId: geralVendasArea
+      parameters:
+        - name: dataInicial
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-05-01"
+        - name: dataFinal
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-05-01"
+        - name: modalidade
+          in: query
+          required: false
+          description: ID da modalidade. Omitir = todas.
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: Totais de vendas por área
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VendaAreaItem"
+              example:
+                - area: "Centro"
+                  total: 12500.00
+                - area: "Norte"
+                  total: 8300.00
+
+components:
+  schemas:
+
+    VendaJbItem:
+      type: object
+      description: Bilhete de JB retornado na consulta de vendas
+      properties:
+        nsu:
+          type: integer
+          description: NSU do bilhete. Exibido com 6 dígitos no frontend.
+          example: 123456
+        data_hora:
+          type: string
+          description: Data e hora do bilhete (`dd/MM/yyyy HH:mm:ss`)
+          example: "01/05/2026 14:30:00"
+        vendedor:
+          type: string
+          description: Nome do vendedor
+          example: "João Silva"
+        apresentacao:
+          type: string
+          description: Nome da modalidade da aposta
+          example: "Milhar"
+        situacao:
+          type: string
+          enum: ["ATIVO", "CANCELADO"]
+          example: "ATIVO"
+        extracao:
+          type: string
+          description: Nome da extração
+          example: "Tarde"
+        comissao_sorteio:
+          type: number
+          format: double
+          description: Comissão do bilhete em BRL
+          example: 5.00
+        total_sorteio:
+          type: number
+          format: double
+          description: Valor total do bilhete em BRL
+          example: 50.00
+        previsao_premio:
+          type: number
+          format: double
+          description: Previsão de prêmio em BRL (cotação × valor apostado)
+          example: 2000.00
+
+    VendaDetalhe:
+      type: object
+      description: Detalhe completo do bilhete para exibição em popup
+      properties:
+        nsu:
+          type: integer
+          example: 123456
+        data_hora:
+          type: string
+          example: "01/05/2026 14:30:00"
+        vendedor:
+          type: string
+          example: "João Silva"
+        extracao:
+          type: string
+          example: "Tarde"
+        situacao:
+          type: string
+          enum: ["ATIVO", "CANCELADO"]
+          example: "ATIVO"
+        palpites:
+          type: array
+          description: Lista de palpites do bilhete com status de cada sorteio
+          items:
+            type: object
+            properties:
+              palpite:
+                type: string
+                example: "1234"
+              modalidade:
+                type: string
+                example: "Milhar"
+              valor:
+                type: number
+                format: double
+                example: 50.00
+              premiado:
+                type: boolean
+                example: false
+
+    CancelamentoResponse:
+      type: object
+      properties:
+        nsu:
+          type: integer
+          example: 123456
+        situacao:
+          type: string
+          example: "CANCELADO"
+        message:
+          type: string
+          example: "Bilhete cancelado com sucesso"
+
+    VendaSorteioItem:
+      type: object
+      description: |
+        Sorteio com totais de vendas.
+        Campo `status` ("EXPIRADO" ou "") é calculado no frontend — **não retornado pela API**.
+      properties:
+        sorteio_numero:
+          type: integer
+          description: Número do sorteio. Exibido com 6 dígitos no frontend.
+          example: 1001
+        descricao:
+          type: string
+          description: Nome da extração
+          example: "Tarde"
+        data_sorteio:
+          type: string
+          format: date
+          description: Data do sorteio (`yyyy-MM-dd` ou `dd/MM/yyyy`)
+          example: "2026-05-01"
+        hora:
+          type: string
+          description: Hora limite do sorteio (`HH:mm:ss`)
+          example: "16:00:00"
+        total_sorteio:
+          type: number
+          format: double
+          description: Total apostado no sorteio em BRL
+          example: 5000.00
+        comissao:
+          type: number
+          format: double
+          example: 500.00
+        liquido:
+          type: number
+          format: double
+          description: total_sorteio - comissao
+          example: 4500.00
+
+    ApuracaoItem:
+      type: object
+      description: |
+        Aposta de um sorteio — usada tanto em apuracaojb quanto em apuracao Bilhetinho.
+        Campo `palpites` vem como CSV ("1234,5678") e é convertido pelo frontend para espaços.
+      properties:
+        nsu:
+          type: integer
+          description: ID do bilhete. Exibido com 6 dígitos.
+          example: 123456
+        poule:
+          type: integer
+          description: Número do bilhete/poule. Exibido com 6 dígitos.
+          example: 789012
+        vendedor:
+          type: string
+          description: Nome do vendedor
+          example: "João Silva"
+        data_hora:
+          type: string
+          description: Data e hora da aposta (`dd/MM/yyyy HH:mm:ss`)
+          example: "01/05/2026 14:30:00"
+        extracao:
+          type: string
+          description: Nome da extração
+          example: "Tarde"
+        palpites:
+          type: string
+          description: |
+            Palpites apostados como CSV.
+            Frontend converte vírgulas para espaços: `"1234,5678"` → `"1234 5678"`.
+          example: "1234,5678"
+        total_sorteio:
+          type: number
+          format: double
+          description: Valor apostado neste sorteio em BRL
+          example: 50.00
+
+    VendaVendedorItem:
+      type: object
+      description: Total de vendas por vendedor no período
+      properties:
+        vendedor:
+          type: string
+          description: Nome do vendedor
+          example: "João Silva"
+        total:
+          type: number
+          format: double
+          description: Total apostado no período em BRL
+          example: 2500.00
+
+    VendaAreaItem:
+      type: object
+      description: Total de vendas por área no período
+      properties:
+        area:
+          type: string
+          description: Nome da área
+          example: "Centro"
+        total:
+          type: number
+          format: double
+          description: Total apostado no período em BRL
+          example: 12500.00
+
+    ApiError:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 422
+        message:
+          type: string
+          example: "Selecione uma área!"

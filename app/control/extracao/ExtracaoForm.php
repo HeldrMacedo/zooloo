@@ -177,7 +177,7 @@ class ExtracaoForm extends TPage
 
                 
             }else {
-                $this->form->cleat();
+                $this->form->clear();
             }
             TTransaction::close();
         }

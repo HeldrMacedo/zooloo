@@ -302,7 +302,7 @@ class VendedorForm extends TPage
 
             if (!empty($data->password))
             {
-                $user->password = md5($data->password);
+                $user->password = password_hash($data->password, PASSWORD_BCRYPT);
             }
 
             $user->store();

@@ -25,6 +25,15 @@
             
         </menu>
     </menuitem>
+    <menuitem label="Lotinha">
+        <icon>fas:ticket-alt fa-fw</icon>
+        <menu>
+            <menuitem label="Resultado">
+                <icon>fas:user-cog fa-fw</icon>
+                <action>LotinhaResultadoForm</action>
+            </menuitem>
+        </menu>
+    </menuitem>
     <menuitem label="Configurações">
         <icon>fas:cog fa-fw</icon>
         <menu>

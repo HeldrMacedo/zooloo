@@ -1,0 +1,627 @@
+openapi: 3.0.3
+info:
+  title: Zooloo — Resultado (Sorteio JB)
+  description: |
+    APIs de lançamento e gestão de resultado do Jogo do Bicho.
+
+    ## Contexto
+
+    O módulo Resultado opera sobre `mov_sorteio`, tabela populada automaticamente pela
+    trigger `trg_mv_cad_extracao_cria_sorteios`. O ciclo de vida de um sorteio é:
+
+    ```
+    Aberto (A) → [resultadojb] Números salvos → [processarjb] Fechado (F)
+                              ↓                              ↑
+                          [limparjb] Limpa números ─────────/  (só se ainda Aberto)
+    ```
+
+    Ao fechar o sorteio (`situacao='F'`), o PostgreSQL dispara automaticamente:
+    - `trg_mv_sorteio_verifica_ganhadores` — calcula bilhetes JB premiados
+    - `trg_mv_sorteio_verifica_ganhadores_lotinha` — calcula prêmios Lotinha
+    - `trg_mv_sorteio_verifica_ganhadores_qui_sen` — calcula prêmios Quininha/Seninha
+
+    **O PHP não executa cálculo de ganhadores — é delegado inteiramente ao banco.**
+
+    ## Algoritmos de cálculo (`int_calculo_sorteio.calculo_id`)
+
+    | calculo_id | Comportamento |
+    |---|---|
+    | 1 | Manual puro — entrada humana, sem auto-geração |
+    | 2 | Sortear 10 prêmios aleatórios com dezenas únicas |
+    | 3 | Sortear 5 prêmios aleatórios; campos 6–10 desabilitados |
+    | 4 | Manual + auto-completar prêmios 6–10 por transposição de dígitos |
+    | 5 | Manual + prêmios 6 e 7 calculados como soma/produto dos 5 primeiros |
+    | 6 | Sortear 5 prêmios aleatórios com dezenas únicas |
+
+    ## Permissões
+
+    - `PERM_ALTERAR_SORTEIO_FECHADO` — permite editar sorteio já fechado (GAP no Zooloo PHP atual)
+    - Usuário `allsystem/Administrator` também pode reabrir sorteios fechados
+
+    ## Escala de confiança
+    🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
+  version: "1.0.0"
+  contact:
+    name: Projeto Zooloo — Reversa Framework
+
+servers:
+  - url: http://localhost
+    description: Ambiente local (Docker)
+
+tags:
+  - name: Resultado — Busca
+    description: Consulta de sorteios disponíveis para lançamento de resultado
+  - name: Resultado — Lançamento
+    description: Salvar, limpar e encerrar sorteios
+
+paths:
+
+  # ─── BUSCA DE SORTEIO ────────────────────────────────────────────────────────
+
+  /api/buscar:
+    get:
+      tags:
+        - Resultado — Busca
+      summary: Buscar sorteio por data e extração
+      description: |
+        Retorna os dados de `mov_sorteio` para a combinação data + extração informada.
+        Usado pela tela de resultado ao clicar "Buscar".
+
+        **Comportamento por estado:**
+        - `numeros_sorteados = ''` e `situacao = 'A'` → sorteio aguardando resultado (pronto para entrada)
+        - `numeros_sorteados` preenchido e `situacao = 'A'` → resultado salvo, aguardando encerramento
+        - `situacao = 'F'` → sorteio encerrado; edição bloqueada (exceto com `PERM_ALTERAR_SORTEIO_FECHADO`)
+        - Sem registro para a data/extração informada → 404
+
+        🟢 CONFIRMADO — via resultadojb.service.ts
+      operationId: buscarSorteio
+      parameters:
+        - name: data
+          in: query
+          required: true
+          description: Data do sorteio no formato `yyyy-MM-dd`
+          schema:
+            type: string
+            format: date
+            example: "2026-05-01"
+        - name: extracao
+          in: query
+          required: true
+          description: ID da extração (`cad_extracao.extracao_id`)
+          schema:
+            type: integer
+            example: 3
+      responses:
+        "200":
+          description: Sorteio encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sorteio"
+              examples:
+                aberto_sem_resultado:
+                  summary: Sorteio aberto, sem resultado
+                  value:
+                    sorteio_id: 142
+                    data_sorteio: "2026-05-01"
+                    hora_sorteio: "16:00:00"
+                    situacao: "A"
+                    numeros_sorteados: ""
+                    extracao:
+                      extracao_id: 3
+                      descricao: "Tarde"
+                      premiacao_maxima: 5
+                      calc_sorteio_id: 1
+                      hora_limite: "15:30:00"
+                aberto_com_resultado:
+                  summary: Sorteio aberto, resultado já salvo
+                  value:
+                    sorteio_id: 142
+                    data_sorteio: "2026-05-01"
+                    hora_sorteio: "16:00:00"
+                    situacao: "A"
+                    numeros_sorteados: "1234,5678,9012,3456,7890"
+                    extracao:
+                      extracao_id: 3
+                      descricao: "Tarde"
+                      premiacao_maxima: 5
+                      calc_sorteio_id: 1
+                      hora_limite: "15:30:00"
+                encerrado:
+                  summary: Sorteio fechado
+                  value:
+                    sorteio_id: 140
+                    data_sorteio: "2026-04-30"
+                    hora_sorteio: "16:00:00"
+                    situacao: "F"
+                    numeros_sorteados: "1234,5678,9012,3456,7890"
+                    extracao:
+                      extracao_id: 3
+                      descricao: "Tarde"
+                      premiacao_maxima: 5
+                      calc_sorteio_id: 1
+                      hora_limite: "15:30:00"
+        "404":
+          description: Não existe sorteio para a data e extração informadas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                status: 404
+                message: "Não existe sorteio para está data e extração informada!"
+
+  /api/vwsorteio:
+    get:
+      tags:
+        - Resultado — Busca
+      summary: Listar sorteios abertos do dia (para combo de extração)
+      description: |
+        Retorna a lista de sorteios abertos (`situacao='A'`) usando a view `vw_sorteio`.
+        Usada para popular o combo de extração na tela de resultado — exibe apenas
+        extrações com sorteios em aberto (não a lista estática de `cad_extracao`).
+
+        Ordenada alfabeticamente por `descricao`.
+
+        🟢 CONFIRMADO — via resultadojb.service.ts
+        > **GAP no Zooloo:** ResultadoList.php usa `cad_extracao` diretamente.
+        > A implementação deveria usar esta view para filtrar apenas sorteios do dia.
+      operationId: listarSorteiosAbertos
+      responses:
+        "200":
+          description: Lista de extrações com sorteios abertos hoje
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VwSorteioItem"
+              example:
+                - extracao: 1
+                  descricao: "Federal"
+                - extracao: 3
+                  descricao: "Tarde"
+                - extracao: 5
+                  descricao: "Noite"
+
+  # ─── LANÇAMENTO DE RESULTADO ─────────────────────────────────────────────────
+
+  /api/resultadojb/{extracao}:
+    put:
+      tags:
+        - Resultado — Lançamento
+      summary: Salvar números sorteados
+      description: |
+        Registra os números sorteados em `mov_sorteio.numeros_sorteados`.
+        O sorteio permanece com `situacao='A'` — não encerra automaticamente.
+
+        **Validação de hora:** `now >= hora_sorteio` da extração é obrigatório antes
+        de aceitar o save. Se a hora ainda não passou, retorna 422.
+
+        🟢 CONFIRMADO — via resultadojb.service.ts (update method)
+        🔴 LACUNA — validação de hora_limite ausente no ResultadoForm.php atual
+
+        ## Formato dos números
+
+        `numeros` é uma string CSV de milhares com 4 dígitos cada:
+        ```
+        "1234,5678,9012,3456,7890"
+        ```
+        - Separador: vírgula (`,`)
+        - Cada prêmio: exatamente 4 dígitos (`0000`–`9999`)
+        - Quantidade: deve ser igual a `premiacao_maxima` da extração
+        - `calculo_id=5`: prêmios 6 e 7 no formato `-DDD` (traço + 3 dígitos)
+
+        ## Auditoria
+
+        Após salvar com sucesso, o cliente deve chamar `POST api/registerLog` com:
+        ```json
+        {"acao": "Lançar Resultado", "historico": "Salvar Resultado"}
+        ```
+
+        🟢 CONFIRMADO — via resultadojb.component.ts
+      operationId: salvarResultado
+      parameters:
+        - $ref: "#/components/parameters/ExtracaoIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResultadoInput"
+            examples:
+              cinco_premios:
+                summary: 5 prêmios (premiacao_maxima=5)
+                value:
+                  data: "2026-05-01"
+                  numeros: "1234,5678,9012,3456,7890"
+              dez_premios:
+                summary: 10 prêmios (calculo_id=2)
+                value:
+                  data: "2026-05-01"
+                  numeros: "1234,5678,9012,3456,7890,2345,6789,0123,4567,8901"
+              calculo_id_5:
+                summary: calculo_id=5 — prêmios 6 e 7 com fórmula
+                value:
+                  data: "2026-05-01"
+                  numeros: "1234,5678,9012,3456,7890,-456,-123"
+      responses:
+        "200":
+          description: Resultado salvo com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultadoResponse"
+              example:
+                sorteio_id: 142
+                extracao_id: 3
+                data_sorteio: "2026-05-01"
+                numeros_sorteados: "1234,5678,9012,3456,7890"
+                situacao: "A"
+        "404":
+          description: Sorteio não encontrado para a data/extração
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Sorteio já encerrado (`situacao='F'`) e usuário sem permissão de alteração
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                status: 409
+                message: "Sorteio encerrado!"
+        "422":
+          description: Validação falhou — horário insuficiente ou formato inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                hora_nao_atingida:
+                  summary: Hora do sorteio ainda não passou
+                  value:
+                    status: 422
+                    message: "O sorteio só pode ser lançado após às 16:00:00"
+                formato_invalido_calculo5:
+                  summary: calculo_id=5 — prêmio 6/7 sem formato -DDD
+                  value:
+                    status: 422
+                    message: "Digite um traço (-) e 3 números após!"
+                quantidade_invalida:
+                  summary: Quantidade de prêmios diferente de premiacao_maxima
+                  value:
+                    status: 422
+                    message: "Número de prêmios inválido. Esperado: 5, recebido: 3"
+
+  /api/processarjb/{extracao}:
+    put:
+      tags:
+        - Resultado — Lançamento
+      summary: Encerrar sorteio (dispara cálculo de ganhadores)
+      description: |
+        Altera `mov_sorteio.situacao` de `'A'` para `'F'`.
+
+        **Após a atualização**, o PostgreSQL dispara automaticamente as triggers:
+        - `trg_mv_sorteio_verifica_ganhadores` — calcula bilhetes JB premiados
+        - `trg_mv_sorteio_verifica_ganhadores_lotinha` — calcula prêmios Lotinha
+        - `trg_mv_sorteio_verifica_ganhadores_qui_sen` — calcula prêmios Quininha/Seninha
+
+        **Pré-condições:**
+        - `mov_sorteio.numeros_sorteados` não pode estar vazio
+        - `mov_sorteio.situacao` deve ser `'A'`
+
+        **Operação irreversível** — uma vez encerrado, só pode ser reaberto por usuário
+        com `PERM_ALTERAR_SORTEIO_FECHADO` ou pelo `allsystem/Administrator`.
+
+        ## Auditoria
+
+        Após encerrar com sucesso, o cliente deve chamar `POST api/registerLog` com:
+        ```json
+        {"acao": "Lançar Resultado", "historico": "Encerrar Resultado"}
+        ```
+
+        🟢 CONFIRMADO — via resultadojb.service.ts (processarJb method)
+      operationId: encerrarSorteio
+      parameters:
+        - $ref: "#/components/parameters/ExtracaoIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SorteioActionInput"
+            example:
+              data: "2026-05-01"
+              sorteio_id: 142
+      responses:
+        "200":
+          description: Sorteio encerrado e triggers de ganhadores disparadas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultadoResponse"
+              example:
+                sorteio_id: 142
+                extracao_id: 3
+                data_sorteio: "2026-05-01"
+                numeros_sorteados: "1234,5678,9012,3456,7890"
+                situacao: "F"
+        "404":
+          description: Sorteio não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Sorteio já encerrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                status: 409
+                message: "Sorteio já está encerrado"
+        "422":
+          description: Sorteio sem números sorteados — não pode ser encerrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                status: 422
+                message: "Não é possível encerrar um sorteio sem números sorteados"
+
+  /api/limparjb/{extracao}:
+    put:
+      tags:
+        - Resultado — Lançamento
+      summary: Limpar resultado do sorteio
+      description: |
+        Apaga os números sorteados de `mov_sorteio.numeros_sorteados`, revertendo
+        o sorteio para o estado "aguardando resultado".
+
+        **Pré-condições:**
+        - `mov_sorteio.situacao` deve ser `'A'` — não limpa sorteios encerrados
+
+        Equivalente a gravar `numeros_sorteados = ''` no registro.
+
+        ## Auditoria
+
+        Após limpar com sucesso, o cliente deve chamar `POST api/registerLog` com:
+        ```json
+        {"acao": "Lançar Resultado", "historico": "Limpar Resultado"}
+        ```
+
+        🟢 CONFIRMADO — via resultadojb.service.ts (limparJb method)
+      operationId: limparResultado
+      parameters:
+        - $ref: "#/components/parameters/ExtracaoIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SorteioActionInput"
+            example:
+              data: "2026-05-01"
+              sorteio_id: 142
+      responses:
+        "200":
+          description: Resultado limpo com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultadoResponse"
+              example:
+                sorteio_id: 142
+                extracao_id: 3
+                data_sorteio: "2026-05-01"
+                numeros_sorteados: ""
+                situacao: "A"
+        "404":
+          description: Sorteio não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Sorteio encerrado — não é possível limpar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                status: 409
+                message: "Não é possível limpar o resultado de um sorteio encerrado"
+
+components:
+
+  parameters:
+
+    ExtracaoIdPath:
+      name: extracao
+      in: path
+      required: true
+      description: ID da extração (`cad_extracao.extracao_id`)
+      schema:
+        type: integer
+        example: 3
+
+  schemas:
+
+    Sorteio:
+      type: object
+      description: Registro de `mov_sorteio` com dados da extração associada
+      properties:
+        sorteio_id:
+          type: integer
+          description: PK do sorteio
+          example: 142
+        data_sorteio:
+          type: string
+          format: date
+          description: Data do sorteio (`yyyy-MM-dd`)
+          example: "2026-05-01"
+        hora_sorteio:
+          type: string
+          description: Hora de divulgação do resultado (`HH:mm:ss`)
+          example: "16:00:00"
+        situacao:
+          type: string
+          enum: ["A", "F"]
+          description: |
+            Estado do sorteio:
+            - `A` — Aberto (aguardando ou com resultado salvo, mas não encerrado)
+            - `F` — Fechado (resultado registrado e ganhadores calculados)
+          example: "A"
+        numeros_sorteados:
+          type: string
+          description: |
+            Números sorteados como CSV de milhares de 4 dígitos.
+            Vazio (`""`) quando o resultado ainda não foi lançado.
+
+            Formato: `"NNNN,NNNN,NNNN,..."`
+            - calculo_id=5: prêmios 6 e 7 no formato `-DDD` (traço + 3 dígitos)
+          example: "1234,5678,9012,3456,7890"
+        extracao:
+          $ref: "#/components/schemas/ExtracaoResumida"
+
+    ExtracaoResumida:
+      type: object
+      description: Dados da extração relevantes para o módulo de resultado
+      properties:
+        extracao_id:
+          type: integer
+          example: 3
+        descricao:
+          type: string
+          example: "Tarde"
+        premiacao_maxima:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: |
+            Número de prêmios que a extração exige (1–10).
+            Determina quantos campos de prêmio são exibidos/habilitados.
+          example: 5
+        calc_sorteio_id:
+          type: integer
+          nullable: true
+          description: |
+            FK para `int_calculo_sorteio` — define o algoritmo de resultado.
+            null = manual puro (equivalente a calculo_id=1).
+          example: 1
+        gerar_restante:
+          type: boolean
+          nullable: true
+          description: Indica se calculo_id=4 pode auto-completar prêmios 6–10
+          example: false
+        hora_limite:
+          type: string
+          description: Hora limite para apostas (`HH:mm:ss`)
+          example: "15:30:00"
+
+    VwSorteioItem:
+      type: object
+      description: Item da view `vw_sorteio` — sorteios abertos do dia para combo de extração
+      properties:
+        extracao:
+          type: integer
+          description: ID da extração (`cad_extracao.extracao_id`) — usado como valor do combo
+          example: 3
+        descricao:
+          type: string
+          description: Texto exibido no combo — nome da extração; ordenado alfabeticamente
+          example: "Tarde"
+
+    ResultadoInput:
+      type: object
+      description: Payload para salvar números sorteados
+      required:
+        - data
+        - numeros
+      properties:
+        data:
+          type: string
+          format: date
+          description: Data do sorteio (`yyyy-MM-dd`)
+          example: "2026-05-01"
+        numeros:
+          type: string
+          description: |
+            Números sorteados como CSV de milhares de 4 dígitos.
+            Quantidade deve ser igual a `premiacao_maxima` da extração.
+
+            Formato padrão: `"NNNN,NNNN,..."`
+            calculo_id=5 (prêmios 6–7): `"-DDD"` (traço + 3 dígitos)
+          example: "1234,5678,9012,3456,7890"
+
+    SorteioActionInput:
+      type: object
+      description: Payload para encerrar ou limpar sorteio
+      required:
+        - data
+        - sorteio_id
+      properties:
+        data:
+          type: string
+          format: date
+          description: Data do sorteio (`yyyy-MM-dd`)
+          example: "2026-05-01"
+        sorteio_id:
+          type: integer
+          description: ID do sorteio a ser processado
+          example: 142
+
+    ResultadoResponse:
+      type: object
+      description: Estado do sorteio após a operação (salvar / encerrar / limpar)
+      properties:
+        sorteio_id:
+          type: integer
+          example: 142
+        extracao_id:
+          type: integer
+          example: 3
+        data_sorteio:
+          type: string
+          format: date
+          example: "2026-05-01"
+        numeros_sorteados:
+          type: string
+          description: Números sorteados após a operação (vazio se foi limpo)
+          example: "1234,5678,9012,3456,7890"
+        situacao:
+          type: string
+          enum: ["A", "F"]
+          example: "A"
+
+    ApiError:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 422
+        message:
+          type: string
+          example: "Operação inválida"
+
+  # ─── NOTA SOBRE AUDITORIA ────────────────────────────────────────────────────
+  # Todas as operações de lançamento de resultado devem ser registradas via
+  # POST api/registerLog (documentado em spec-admin-operacional.yaml).
+  # O cliente Angular chama registerLog imediatamente após cada sucesso.
+  # 🟢 CONFIRMADO — via resultadojb.component.ts
+
+  # ─── GAP: Integração com register_log ────────────────────────────────────────
+  # O register_log depende de api.ipify.org (HTTP externo) para obter o IP do
+  # cliente. Em ambientes sem acesso à internet, isso pode causar timeout/falha.
+  # 🔴 LACUNA — ver gap-admin-operacional.md para detalhes
+
+  # ─── GAP: PERM_ALTERAR_SORTEIO_FECHADO ───────────────────────────────────────
+  # A permissão PERM_ALTERAR_SORTEIO_FECHADO existe no Java mas não está
+  # implementada no Zooloo PHP. Atualmente sorteios fechados são completamente
+  # imutáveis via UI — só editáveis via acesso direto ao banco.
+  # 🔴 LACUNA — ver gap-resultadojb.md para detalhes
