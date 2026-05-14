@@ -9,7 +9,17 @@
             <menuitem label="Gerente">
                 <icon>fas:user-tie fa-fw</icon>
                 <action>GerenteList</action>
+            </menuitem> 
+            <menuitem label="Vendedor">
+                <icon>fas:id-badge fa-fw</icon>
+                <action>VendedorList</action>
             </menuitem>
+            
+        </menu>
+    </menuitem>
+    <menuitem label="JB">
+        <icon>fas:paw fa-fw</icon>
+        <menu>
             <menuitem label="Extração">
                 <icon>fas:clock fa-fw</icon>
                 <action>ExtracaoList</action>
@@ -18,11 +28,95 @@
                 <icon>fas:building fa-fw</icon>
                 <action>ModalidadeList</action>
             </menuitem>
-            <menuitem label="Vendedor">
-                <icon>fas:id-badge fa-fw</icon>
-                <action>VendedorList</action>
+            <menuitem label="Resultado">
+                <icon>fas:flag-checkered fa-fw</icon>
+                <action>ResultadoList</action>
+            </menuitem>
+        </menu>
+    </menuitem>
+     <menuitem label="Lotinha">
+        <icon>fas:ticket-alt fa-fw</icon>
+        <menu>
+            <menuitem label="Extração">
+                <icon>fas:clock fa-fw</icon>
+                <action>LotinhaExtracaoList</action>
+            </menuitem>
+            <menuitem label="Modalidades">
+                <icon>fas:list fa-fw</icon>
+                <action>LotinhaModalidadeList</action>
+            </menuitem>
+            <menuitem label="Resultado">
+                <icon>fas:flag-checkered fa-fw</icon>
+                <action>LotinhaResultadoList</action>
+            </menuitem>
+        </menu>
+    </menuitem>
+      <menuitem label="Quininha">
+        <icon>fas:star fa-fw</icon>
+        <menu>
+            <menuitem label="Extração">
+                <icon>fas:clock fa-fw</icon>
+                <action>QuininhaExtracaoList</action>
+            </menuitem>
+            <menuitem label="Modalidades">
+                <icon>fas:list fa-fw</icon>
+                <action>QuininhaModalidadeList</action>
+            </menuitem>
+            <menuitem label="Resultado">
+                <icon>fas:flag-checkered fa-fw</icon>
+                <action>QuininhaResultadoList</action>
+            </menuitem>
+        </menu>
+    </menuitem>
+    <menuitem label="Seninha">
+        <icon>fas:star-half-alt fa-fw</icon>
+        <menu>
+            <menuitem label="Extração">
+                <icon>fas:clock fa-fw</icon>
+                <action>SeninhaExtracaoList</action>
+            </menuitem>
+            <menuitem label="Modalidades">
+                <icon>fas:list fa-fw</icon>
+                <action>SeninhaModalidadeList</action>
+            </menuitem>
+            <menuitem label="Resultado">
+                <icon>fas:flag-checkered fa-fw</icon>
+                <action>SeninhaResultadoList</action>
+            </menuitem>
+        </menu>
+    </menuitem>
+    <menuitem label="Operacional">
+        <icon>fas:chart-bar fa-fw</icon>
+        <menu>
+            <menuitem label="Consulta Vendas">
+                <icon>fas:search fa-fw</icon>
+                <action>ConsultaVendasList</action>
+            </menuitem>
+            <menuitem label="Vendas por Sorteio">
+                <icon>fas:table fa-fw</icon>
+                <action>VendasPorSorteioList</action>
+            </menuitem>
+            <menuitem label="Premiações">
+                <icon>fas:trophy fa-fw</icon>
+                <action>PremiacaoList</action>
+            </menuitem>
+            <menuitem label="Apuração">
+                <icon>fas:calculator fa-fw</icon>
+                <action>ApuracaoList</action>
+            </menuitem>
+            <menuitem label="Mapa de Apostas">
+                <icon>fas:map fa-fw</icon>
+                <action>MapaApostasList</action>
+            </menuitem>
+            <menuitem label="Listagem de Bilhetes">
+                <icon>fas:list-alt fa-fw</icon>
+                <action>BilheteList</action>
             </menuitem>
             
+            <menuitem label="Descarrego">
+                <icon>fas:exclamation-triangle fa-fw</icon>
+                <action>DescarregoList</action>
+            </menuitem>
         </menu>
     </menuitem>
     <menuitem label="Configurações">
@@ -55,82 +149,6 @@
             <menuitem label="Parâmetros">
                 <icon>fas:user-cog fa-fw</icon>
                 <action>ParametrosList</action>
-            </menuitem>
-        </menu>
-    </menuitem>
-    <menuitem label="Quininha">
-        <icon>fas:star fa-fw</icon>
-        <menu>
-            <menuitem label="Extrações">
-                <icon>fas:clock fa-fw</icon>
-                <action>QuininhaExtracaoList</action>
-            </menuitem>
-            <menuitem label="Modalidades">
-                <icon>fas:list fa-fw</icon>
-                <action>QuininhaModalidadeList</action>
-            </menuitem>
-        </menu>
-    </menuitem>
-    <menuitem label="Seninha">
-        <icon>fas:star-half-alt fa-fw</icon>
-        <menu>
-            <menuitem label="Extrações">
-                <icon>fas:clock fa-fw</icon>
-                <action>SeninhaExtracaoList</action>
-            </menuitem>
-            <menuitem label="Modalidades">
-                <icon>fas:list fa-fw</icon>
-                <action>SeninhaModalidadeList</action>
-            </menuitem>
-        </menu>
-    </menuitem>
-    <menuitem label="Lotinha">
-        <icon>fas:ticket-alt fa-fw</icon>
-        <menu>
-            <menuitem label="Extrações">
-                <icon>fas:clock fa-fw</icon>
-                <action>LotinhaExtracaoList</action>
-            </menuitem>
-            <menuitem label="Modalidades">
-                <icon>fas:list fa-fw</icon>
-                <action>LotinhaModalidadeList</action>
-            </menuitem>
-        </menu>
-    </menuitem>
-    <menuitem label="Operacional">
-        <icon>fas:chart-bar fa-fw</icon>
-        <menu>
-            <menuitem label="Consulta Vendas">
-                <icon>fas:search fa-fw</icon>
-                <action>ConsultaVendasList</action>
-            </menuitem>
-            <menuitem label="Vendas por Sorteio">
-                <icon>fas:table fa-fw</icon>
-                <action>VendasPorSorteioList</action>
-            </menuitem>
-            <menuitem label="Premiações">
-                <icon>fas:trophy fa-fw</icon>
-                <action>PremiacaoList</action>
-            </menuitem>
-            <menuitem label="Apuração">
-                <icon>fas:calculator fa-fw</icon>
-                <action>ApuracaoList</action>
-            </menuitem>
-            <menuitem label="Mapa de Apostas">
-                <icon>fas:map fa-fw</icon>
-                <action>MapaApostasList</action>
-            </menuitem>
-            <menuitem label="Listagem de Bilhetes">
-                <icon>fas:list-alt fa-fw</icon>
-                <action>BilheteList</action>
-            </menuitem>
-            <menuitem label="Resultado">
-                <icon>fas:flag-checkered fa-fw</icon>
-                <action>ResultadoList</action>
-            </menuitem>
-            <menuitem label="Descarrego">
-                <icon>fas:exclamation-triangle fa-fw</icon>
-                <action>DescarregoList</action>
             </menuitem>
         </menu>
     </menuitem>

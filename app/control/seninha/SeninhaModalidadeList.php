@@ -2,101 +2,144 @@
 
 use Adianti\Base\TStandardList;
 use Adianti\Control\TAction;
-use Adianti\Database\TCriteria;
-use Adianti\Database\TFilter;
+use Adianti\Database\TTransaction;
 use Adianti\Registry\TSession;
 use Adianti\Widget\Container\TPanelGroup;
 use Adianti\Widget\Container\TVBox;
 use Adianti\Widget\Datagrid\TDataGrid;
+use Adianti\Widget\Datagrid\TDataGridAction;
 use Adianti\Widget\Datagrid\TDataGridColumn;
 use Adianti\Widget\Datagrid\TPageNavigation;
-use Adianti\Widget\Form\TLabel;
+use Adianti\Widget\Dialog\TMessage;
+use Adianti\Widget\Form\TButton;
+use Adianti\Widget\Form\TEntry;
 use Adianti\Widget\Util\TXMLBreadCrumb;
 use Adianti\Wrapper\BootstrapDatagridWrapper;
 use Adianti\Wrapper\BootstrapFormBuilder;
 
 class SeninhaModalidadeList extends TStandardList
 {
-    const JOGO_ID = 27; // SEN
-
     protected $form;
     protected $datagrid;
     protected $pageNavigation;
+    protected $loaded;
 
     public function __construct()
     {
         parent::__construct();
 
-        parent::setDatabase('permission');
-        parent::setActiveRecord('Modalidade');
-        parent::setDefaultOrder('ordem', 'asc');
-        parent::setFilterFixedCriteria($this->getJogoCriteria());
+        parent::setDefaultOrder('apresentacao');
+        parent::addFilterField('apresentacao', 'like', 'apresentacao');
 
-        $this->form = new BootstrapFormBuilder('form_seninha_modalidade');
+        parent::setAfterSearchCallback([$this, 'onAfterSearch']);
+
+        $this->form = new BootstrapFormBuilder('form_search_seninha_modalidade');
         $this->form->setFormTitle('Seninha — Configuração de Modalidade');
 
-        $btn = $this->form->addAction('Atualizar', new TAction([$this, 'onReload']), 'fa:sync blue');
+        $apresentacao = new TEntry('apresentacao');
+
+        $this->form->setData(TSession::getValue(__CLASS__ . '_filter_data'));
+
+        $btn = $this->form->addAction(_t('Find'), new TAction(array($this, 'onSearch')), 'fa:search');
         $btn->class = 'btn btn-sm btn-primary';
 
         $this->datagrid = new BootstrapDatagridWrapper(new TDataGrid);
         $this->datagrid->style = 'width: 100%';
 
-        $col_apresentacao = new TDataGridColumn('apresentacao', 'Modalidade', 'left', '30%');
-        $col_multiplicador = new TDataGridColumn('multiplicador', 'Qtd Números', 'center', '12%');
-        $col_sena   = new TDataGridColumn('multiplicador_colocacao_01', 'Prêmio Sena (6 ac.)', 'right', '16%');
-        $col_quina  = new TDataGridColumn('multiplicador_colocacao_02', 'Prêmio Quina (5 ac.)', 'right', '16%');
-        $col_quadra = new TDataGridColumn('multiplicador_colocacao_03', 'Prêmio Quadra (4 ac.)', 'right', '16%');
-        $col_ativo  = new TDataGridColumn('ativo', 'Ativo', 'center', '10%');
+        $col_apresentacao  = new TDataGridColumn('apresentacao',                'Modalidade',           'left');
+        $col_multiplicador = new TDataGridColumn('multiplicador',               'Qtd Números',          'center');
+        $col_limite        = new TDataGridColumn('limite_palpite',              'Limite Palpite',       'center');
+        $col_sena          = new TDataGridColumn('multiplicador_colocacao_01',  'Prêmio Sena (6 ac.)',  'right');
+        $col_quina         = new TDataGridColumn('multiplicador_colocacao_02',  'Prêmio Quina (5 ac.)', 'right');
+        $col_quadra        = new TDataGridColumn('multiplicador_colocacao_03',  'Prêmio Quadra (4 ac.)','right');
+        $col_ativo         = new TDataGridColumn('ativo',                       'Ativo',                'center');
 
-        $format_brl = function($value) {
-            return 'R$ ' . number_format((float)$value, 2, ',', '.');
-        };
+        $format_brl = fn($value) => 'R$ ' . number_format((float)$value, 2, ',', '.');
         $col_sena->setTransformer($format_brl);
         $col_quina->setTransformer($format_brl);
         $col_quadra->setTransformer($format_brl);
 
-        $col_ativo->setTransformer(function($value) {
-            return $value == 'S'
-                ? "<span class='label label-success'>Sim</span>"
-                : "<span class='label label-danger'>Não</span>";
-        });
+        $col_multiplicador->setTransformer(fn($value) => intval($value));
+        $col_limite->setTransformer(fn($value) => intval($value));
+
+        $col_ativo->setTransformer(fn($value) => $value == 'S'
+            ? "<span class='label label-success'>Sim</span>"
+            : "<span class='label label-danger'>Não</span>");
 
         $this->datagrid->addColumn($col_apresentacao);
         $this->datagrid->addColumn($col_multiplicador);
+        $this->datagrid->addColumn($col_limite);
         $this->datagrid->addColumn($col_sena);
         $this->datagrid->addColumn($col_quina);
         $this->datagrid->addColumn($col_quadra);
         $this->datagrid->addColumn($col_ativo);
 
+        $action_edit = new TDataGridAction(['SeninhaModalidadeForm', 'onEdit'], ['key' => '{modalidade_id}', 'register_state' => 'false']);
+        $action_edit->setButtonClass('btn btn-default');
+        $action_edit->setLabel('Editar');
+        $action_edit->setImage('far:edit blue');
+        $this->datagrid->addAction($action_edit);
+
         $this->datagrid->createModel();
 
-        $this->pageNavigation = new TPageNavigation;
-        $this->pageNavigation->enableCounters();
-        $this->pageNavigation->setAction(new TAction([$this, 'onReload']));
-        $this->pageNavigation->setWidth($this->datagrid->getWidth());
-
-        $panel = new TPanelGroup();
+        $panel = new TPanelGroup('Seninha — Configuração de Modalidade');
         $panel->add($this->datagrid)->style = 'overflow-x:auto';
         $panel->addFooter($this->pageNavigation);
+
+        $btnf = TButton::create('find', [$this, 'onSearch'], '', 'fa:search');
+        $btnf->style = 'height: 37px; margin-right:4px;';
+
+        $form_search = new \Adianti\Widget\Form\TForm('form_search_descricao');
+        $form_search->style = 'float:left;display:flex';
+        $form_search->add($apresentacao, true);
+        $form_search->add($btnf, true);
+
+        $panel->addHeaderWidget($form_search);
+
+        if (TSession::getValue(get_class($this) . '_filter_counter') > 0) {
+            $this->filter_label->class = 'btn btn-primary';
+            $this->filter_label->setLabel(_t('Filters') . ' (' . TSession::getValue(get_class($this) . '_filter_counter') . ')');
+        }
 
         $container = new TVBox;
         $container->style = 'width: 100%';
         $container->add(new TXMLBreadCrumb('menu.xml', __CLASS__));
-        $container->add($this->form);
         $container->add($panel);
 
         parent::add($container);
     }
 
-    private function getJogoCriteria()
+    public function onReload($param = null)
     {
-        $criteria = new TCriteria;
-        $criteria->add(new TFilter('jogo_id', '=', self::JOGO_ID));
-        return $criteria;
+        try {
+            TTransaction::open('permission');
+
+            $filtro_banca = IntJogo::FILTRO_BANCA_SENINA;
+            $modalidades = Modalidade::where("jogo_id", 'in', "(SELECT jogo_id FROM int_jogo WHERE filtro_banca = :[{$filtro_banca}]:)")->load();
+
+            usort($modalidades, fn($a, $b) => strnatcasecmp($a->apresentacao, $b->apresentacao));
+            $objects = (object) $modalidades;
+
+            $this->datagrid->clear();
+            if ($objects) {
+                foreach ($objects as $object) {
+                    $this->datagrid->addItem($object);
+                }
+            }
+
+            TTransaction::close();
+            $this->loaded = true;
+        } catch (Exception $e) {
+            new TMessage('error', $e->getMessage());
+            TTransaction::rollback();
+        }
     }
 
-    public function onSearch($param)
+    public function show()
     {
-        $this->onReload($param);
+        if (!$this->loaded AND (!isset($_GET['method']) OR !(in_array($_GET['method'], ['onReload'])))) {
+            $this->onReload();
+        }
+        parent::show();
     }
 }

@@ -8,6 +8,11 @@ class IntJogo extends TRecord
     const PRIMARYKEY = 'jogo_id';
     const IDPOLICY = 'max';
 
+    const FILTRO_BANCA_JB       = 1; // JB
+    const FILTRO_BANCA_QUINHA   = 2; // QUI
+    const FILTRO_BANCA_SENINA   = 3; // SENINA
+    const FILTRO_BANCA_LOTINHA  = 4; // LOTINHA
+
     public function __construct($id = null, $callObjectLoad = TRUE)
     {
         parent::__construct($id, $callObjectLoad);
