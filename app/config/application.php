@@ -60,6 +60,18 @@ return [
         'logo' => '',
         'background' => ''
     ],
+    'security' => [
+        // Origens autorizadas para CORS (apps nativos ignoram CORS).
+        // Use ['*'] apenas em desenvolvimento. Em produção, liste hosts explícitos.
+        'cors_allowed_origins' => ['*'],
+    ],
+    'rate_limit' => [
+        'login_max'     => 5,    // tentativas
+        'login_window'  => 300,  // segundos
+        'login_lockout' => 900,  // segundos de bloqueio por login após exceder
+        'ip_max'        => 20,
+        'ip_window'     => 300,
+    ],
     'template' => [
         'navbar' => [
             'has_program_search' => '1',
