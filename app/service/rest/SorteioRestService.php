@@ -16,21 +16,23 @@ class SorteioRestService
      */
     public static function abertos($param)
     {
-        try
-        {
+        try {
+
             $usuario_id = $param['_auth']['id'] ?? null;
-            if (!$usuario_id)
-            {
+            // var_dump($usuario_id);
+            if (!$usuario_id) {
                 throw new Exception('Usuário não autenticado');
             }
 
+            $data_sorteio = $param['data']['data_sorteio'] ?? date('Y-m-d');
+
             TTransaction::open('permission');
-
+            // var_dump($param);
             $vendedor = self::getVendedor($usuario_id);
-            $area_id  = $vendedor->area_id;
-
+            $area_id = $vendedor->area_id;
+            // var_dump($area_id);
             $conn = TTransaction::get();
-            $sql  = "
+            $sql = "
                 SELECT
                     ms.sorteio_id,
                     ms.sorteio_numero,
@@ -49,41 +51,42 @@ class SorteioRestService
                     AND ae.ativo = true
                 WHERE ms.situacao = 'A'
                   AND e.ativo = 'S'
-                  AND ms.data_sorteio = CURRENT_DATE
-                  AND e.hora_limite > CURRENT_TIME
+                  AND ms.data_sorteio = :data_sorteio
                 ORDER BY e.hora_limite ASC
             ";
 
             $stmt = $conn->prepare($sql);
-            $stmt->execute([':area_id' => $area_id]);
+            $stmt->execute([
+                ':area_id' => $area_id,
+                ':data_sorteio' => $data_sorteio
+
+            ]);
             $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            // var_dump($rows);
 
             TTransaction::close();
 
             $sorteios = [];
-            foreach ($rows as $row)
-            {
-                $minutos_restantes = self::minutosAteHoraLimite($row['hora_limite']);
+            foreach ($rows as $row) {
+                $minutos_restantes = self::minutosAteHoraLimite($row['data_sorteio'], $row['hora_limite']);
                 $sorteios[] = [
-                    'sorteio_id'                 => (int) $row['sorteio_id'],
-                    'sorteio_numero'             => (int) $row['sorteio_numero'],
-                    'data_sorteio'               => $row['data_sorteio'],
-                    'hora_sorteio'               => $row['hora_sorteio'],
-                    'situacao'                   => $row['situacao'],
-                    'extracao_id'                => (int) $row['extracao_id'],
-                    'extracao_descricao'         => $row['extracao_descricao'],
-                    'extracao_descricao_completa'=> $row['extracao_descricao_completa'],
-                    'hora_limite'                => $row['hora_limite'],
-                    'extracao_instantanea'       => $row['extracao_instantanea'],
-                    'minutos_restantes'          => $minutos_restantes,
-                    'urgente'                    => $minutos_restantes <= 30,
+                    'sorteio_id' => (int) $row['sorteio_id'],
+                    'sorteio_numero' => (int) $row['sorteio_numero'],
+                    'data_sorteio' => $row['data_sorteio'],
+                    'hora_sorteio' => $row['hora_sorteio'],
+                    'situacao' => $row['situacao'],
+                    'extracao_id' => (int) $row['extracao_id'],
+                    'descricao_mobile' => $row['extracao_descricao'],
+                    'descricao' => $row['extracao_descricao_completa'],
+                    'hora_limite' => $row['hora_limite'],
+                    'extracao_instantanea' => $row['extracao_instantanea'],
+                    'minutos_restantes' => $minutos_restantes,
+                    'urgente' => $minutos_restantes <= 30,
                 ];
             }
 
             return $sorteios;
-        }
-        catch (Exception $e)
-        {
+        } catch (Exception $e) {
             TTransaction::rollback();
             throw $e;
         }
@@ -97,27 +100,23 @@ class SorteioRestService
         $criteria->add(new TFilter('ativo', '=', 'S'));
         $lista = $repo->load($criteria);
 
-        if (empty($lista))
-        {
+        if (empty($lista)) {
             throw new Exception('Vendedor não encontrado');
         }
         return $lista[0];
     }
 
-    private static function minutosAteHoraLimite($hora_limite)
+    private static function minutosAteHoraLimite($data_sorteio, $hora_limite)
     {
-        $agora  = new \DateTime('now');
-        $limite = \DateTime::createFromFormat('H:i:s', $hora_limite);
-        if (!$limite)
-        {
+        $agora = new \DateTime('now');
+        $limite = \DateTime::createFromFormat('Y-m-d H:i:s', $data_sorteio . ' ' . $hora_limite);
+        if (!$limite) {
             return 0;
         }
-        $limite->setDate((int) $agora->format('Y'), (int) $agora->format('m'), (int) $agora->format('d'));
+        if ($agora >= $limite) {
+            return 0;
+        }
         $diff = $agora->diff($limite);
-        if ($diff->invert)
-        {
-            return 0;
-        }
-        return ($diff->h * 60) + $diff->i;
+        return ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
     }
 }

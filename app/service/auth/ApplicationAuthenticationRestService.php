@@ -23,7 +23,7 @@ use \Firebase\JWT\Key;
  */
 class ApplicationAuthenticationRestService implements AdiantiRestService
 {
-    const ACCESS_TTL_SECONDS  = 900;        // 15 min
+    const ACCESS_TTL_SECONDS  = 86400;      // 24 horas
     const REFRESH_TTL_SECONDS = 2592000;    // 30 dias
     const GENERIC_INVALID_MSG = 'Não foi possível autenticar. Verifique suas credenciais.';
 
