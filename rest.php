@@ -3,19 +3,40 @@
 use Adianti\Core\AdiantiApplicationConfig;
 use Adianti\Core\AdiantiCoreApplication;
 
-header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
 // initialization script
 require_once 'init.php';
+
+/* ----------------------------------------------------------------- CORS */
+$ini_cors = AdiantiApplicationConfig::get();
+$allowed_origins = $ini_cors['security']['cors_allowed_origins'] ?? [];
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+header('Content-Type: application/json; charset=utf-8');
+header('Vary: Origin');
+
+if (!empty($allowed_origins) && in_array('*', $allowed_origins, true)) {
+    // explicitamente liberado (dev) — eco do Origin, NÃO usa "*" com credentials
+    if ($origin !== '') header('Access-Control-Allow-Origin: ' . $origin);
+    else header('Access-Control-Allow-Origin: *');
+} elseif ($origin !== '' && in_array($origin, $allowed_origins, true)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+} elseif (empty($allowed_origins)) {
+    // sem configuração explícita — modo legado em dev, restrito em produção
+    if (!empty($ini_cors['general']['debug']) && $ini_cors['general']['debug'] === '1') {
+        if ($origin !== '') header('Access-Control-Allow-Origin: ' . $origin);
+    }
+    // em produção sem config: nenhum header CORS = navegador bloqueia (apps nativos não são afetados)
+}
+
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+header('Access-Control-Max-Age: 600');
+header('X-Content-Type-Options: nosniff');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit();
+}
 
 class AdiantiRestServer
 {
@@ -24,92 +45,83 @@ class AdiantiRestServer
         $ini      = AdiantiApplicationConfig::get();
         $input    = json_decode(file_get_contents("php://input"), true);
         $request  = array_merge($request, (array) $input);
-        $class    = isset($request['class']) ? $request['class']   : '';
+        $class    = isset($request['class'])  ? $request['class']  : '';
         $method   = isset($request['method']) ? $request['method'] : '';
         $headers  = AdiantiCoreApplication::getHeaders();
         $response = NULL;
-        
+
         $headers['Authorization'] = $headers['Authorization'] ?? ($headers['authorization'] ?? null);
-        
+
         try
         {
-            // Para métodos de login, não exigir autorização
-            if ($class === 'ApplicationAuthenticationRestService' && $method === 'login')
-            {
-                // Login não precisa de autorização prévia
+            $is_login    = ($class === 'ApplicationAuthenticationRestService' && $method === 'login');
+            $is_refresh  = ($class === 'ApplicationAuthenticationRestService' && $method === 'refreshToken');
+
+            if ($is_login || $is_refresh) {
+                // public — autenticação acontece dentro do próprio service
             }
             else if (empty($headers['Authorization']))
             {
-                throw new Exception('Authorization required');
+                http_response_code(401);
+                return json_encode(['status' => 'error', 'data' => 'Authorization required']);
             }
             else
             {
-                if (substr($headers['Authorization'], 0, 5) == 'Basic')
+                $auth = $headers['Authorization'];
+                if (substr($auth, 0, 5) === 'Basic')
                 {
-                    if (empty($ini['general']['rest_key']))
-                    {
-                        throw new Exception('REST key not defined');
+                    if (empty($ini['general']['rest_key'])) {
+                        http_response_code(500);
+                        return json_encode(['status' => 'error', 'data' => 'REST key not defined']);
                     }
-                    
-                    if ($ini['general']['rest_key'] !== substr($headers['Authorization'], 6))
-                    {
+                    if ($ini['general']['rest_key'] !== substr($auth, 6)) {
                         http_response_code(401);
-                        return json_encode(array('status' => 'error', 'data' => 'Authorization error'));
+                        return json_encode(['status' => 'error', 'data' => 'Authorization error']);
                     }
                 }
-                else if (substr($headers['Authorization'], 0, 6) == 'Bearer')
+                else if (substr($auth, 0, 6) === 'Bearer')
                 {
-                    // Validar token JWT usando o serviço de autenticação
-                    $token = substr($headers['Authorization'], 7);
+                    $token = substr($auth, 7);
                     $validation = ApplicationAuthenticationRestService::validateToken(['token' => $token]);
-
-                    if (!$validation['success'])
-                    {
+                    if (empty($validation['success'])) {
                         http_response_code(401);
-                        return json_encode(array('status' => 'error', 'data' => $validation['message']));
+                        return json_encode(['status' => 'error', 'data' => $validation['message'] ?? 'Token inválido']);
                     }
-
-                    // Injeta dados do usuário autenticado no request para uso nos services
                     $request['_auth'] = $validation['user'];
                 }
                 else
                 {
-                    http_response_code(403);
-                    throw new Exception('Authorization error');
+                    http_response_code(401);
+                    return json_encode(['status' => 'error', 'data' => 'Authorization scheme not supported']);
                 }
             }
-            
-            // Executar método da classe
+
             if (class_exists($class) && method_exists($class, $method))
             {
-                $response = call_user_func(array($class, $method), $request);
+                $response = call_user_func([$class, $method], $request);
             }
             else
             {
-                throw new Exception("Class {$class} or method {$method} not found");
+                http_response_code(404);
+                return json_encode(['status' => 'error', 'data' => 'Endpoint not found']);
             }
-            
-            if (is_array($response))
-            {
+
+            if (is_array($response)) {
                 array_walk_recursive($response, ['AdiantiStringConversion', 'assureUnicode']);
             }
-            return json_encode(array('status' => 'success', 'data' => $response));
+            return json_encode(['status' => 'success', 'data' => $response]);
         }
         catch (Exception $e)
         {
-            if (200 === http_response_code())
-            {
-                http_response_code(500);
-            }
-            return json_encode(array('status' => 'error', 'data' => $e->getMessage()));
+            if (200 === http_response_code()) http_response_code(500);
+            $debug = !empty($ini['general']['debug']) && $ini['general']['debug'] === '1';
+            return json_encode(['status' => 'error', 'data' => $debug ? $e->getMessage() : 'Erro interno']);
         }
         catch (Error $e)
         {
-            if (200 === http_response_code())
-            {
-                http_response_code(500);
-            }
-            return json_encode(array('status' => 'error', 'data' => $e->getMessage()));
+            if (200 === http_response_code()) http_response_code(500);
+            $debug = !empty($ini['general']['debug']) && $ini['general']['debug'] === '1';
+            return json_encode(['status' => 'error', 'data' => $debug ? $e->getMessage() : 'Erro interno']);
         }
     }
 }

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 namespace Adianti\Database {
+    if (!class_exists(__NAMESPACE__ . '\\TTransaction', false)) {
     class TTransaction
     {
         public static function open($database): void
@@ -21,6 +22,7 @@ namespace Adianti\Database {
         {
             return null;
         }
+    }
     }
 }
 

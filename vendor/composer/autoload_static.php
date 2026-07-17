@@ -99,8 +99,8 @@ class ComposerStaticInit4074d5b77a855dbfd71e43da22fa21e2
         ),
         'Jfcherng\\Utility\\' => 
         array (
-            0 => __DIR__ . '/..' . '/jfcherng/php-color-output/src',
-            1 => __DIR__ . '/..' . '/jfcherng/php-mb-string/src',
+            0 => __DIR__ . '/..' . '/jfcherng/php-mb-string/src',
+            1 => __DIR__ . '/..' . '/jfcherng/php-color-output/src',
         ),
         'Jfcherng\\Diff\\' => 
         array (

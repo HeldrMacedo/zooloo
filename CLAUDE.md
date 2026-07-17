@@ -245,19 +245,59 @@ class Xxx extends TRecord {
 
 ## REST API
 
-Endpoint base: `http://localhost/rest.php`
+Endpoint base: `http://localhost/rest.php`. Router em `rest.php` (raiz).
+Envelope de resposta: `{ "status": "success"|"error", "data": ... }`.
 
-| Método | Descrição |
-|---|---|
-| `ApplicationAuthenticationRestService::login` | Login com usuário/senha, retorna JWT |
-| `ApplicationAuthenticationRestService::validateToken` | Valida JWT |
-| `ApplicationAuthenticationRestService::refreshToken` | Renova JWT |
-| `ApplicationAuthenticationRestService::logout` | Logout |
+### Autenticação móvel (revisada nas Etapas 1–4 — consumida pelo app `app-zooloo`)
 
-- Token JWT válido por **1 hora**
-- Algoritmo: `HS256`
-- Chave: `APPLICATION_NAME + seed` (seed em `app/config/application.php`)
-- `rest_key` global: `zooloo_api_key_2025`
+| Método | Bearer? | Descrição |
+|---|---|---|
+| `ApplicationAuthenticationRestService::login` | Não | Login; devolve `token` (access), `refresh_token`, `user`, **`vendedor` + `permissoes`** |
+| `ApplicationAuthenticationRestService::refreshToken` | Não | Rotaciona o par a partir de `refresh_token` (revoga o antigo) |
+| `ApplicationAuthenticationRestService::validateToken` | — | Valida access-token (checa `jti` não-revogado) |
+| `ApplicationAuthenticationRestService::logout` | Sim | Revoga access + refresh persistidos |
+| `ApplicationAuthenticationRestService::logoutAll` | Sim | Revoga todos os tokens ativos do usuário |
+
+**Modelo de tokens (não mais "1 hora simples"):**
+- **access-token**: JWT curto (**15 min**), com `jti`, usado em `Authorization: Bearer`.
+- **refresh-token**: JWT longo (**30 dias**), com `jti`, persistido e revogável.
+- Rotação obrigatória no refresh; **reuso de refresh já rotacionado revoga toda a árvore** (replay detection).
+- Algoritmo `HS256`; chave `APPLICATION_NAME + seed` (`app/config/application.php`).
+- Login resolve `system_users.id → cad_vendedor.usuario_id` e devolve flags do vendedor.
+- Mensagens de erro de login são **genéricas** (mitiga user enumeration).
+
+**Estruturas criadas na Etapa 2:**
+- `app/model/entities/MobAuthToken.php` — TRecord do token revogável (tabela `mob_auth_token`).
+- `app/migrations/etapa2_auth.sql` — cria `mob_auth_token` (rodar antes de usar; idempotente).
+- `app/service/auth/AuthRateLimiter.php` — rate-limit file-based em `tmp/ratelimit/`
+  (por login: 5/5min, lockout 15min; por IP: 20/5min). Config em `application.php → rate_limit`.
+
+**Segurança em `rest.php`:**
+- CORS restrito por `application.php → security.cors_allowed_origins` (`['*']` só em dev).
+- Sem `Authorization` → **401 + JSON** (antes lançava Exception → 500).
+- Erros internos não vazam mensagem quando `debug='0'`.
+- `rest_key` global (Basic auth legada): `zooloo_api_key_2025`.
+
+> Documentação operacional completa da auth (diagrama, checklist de produção,
+> troubleshooting): `C:/desenvolvimento/app-zooloo/README-AUTH.md`.
+
+---
+
+## Testes
+
+Harness próprio (não-PHPUnit) em `tests/` — `test(nome, fn)` + `assert*` de `tests/bootstrap.php`.
+
+```bash
+composer test    # = php tests/run.php (roda todos os tests/*.test.php)
+# via Docker:
+docker exec -i applications_www sh -lc "cd /var/www/html && composer test"
+```
+
+Cobertura de auth: `tests/auth-rest-service.test.php` (login/refresh/logout/rotação/replay/
+vendedor) e `tests/auth-rate-limiter.test.php`. **Convenção obrigatória:** ao declarar
+mocks de classes Adianti em arquivos de teste, sempre guardar com
+`if (!class_exists(__NAMESPACE__ . '\\X', false))` — vários arquivos compartilham o mesmo
+processo e declarações sem guarda causam fatal de redeclaração.
 
 ---
 
@@ -265,6 +305,8 @@ Endpoint base: `http://localhost/rest.php`
 
 - Ao deixar um Gerente inativo, também deixar o usuário do sistema inativo.
 - `ResultadoForm`: verificar o horário limite da extração antes de permitir salvar o resultado.
+- **Auth:** trocar `seed` e `rest_key` antes de produção; `debug='0'`; `cors_allowed_origins`
+  com hosts explícitos; binding `terminal_id`/serial no JWT; auditoria de refresh/logoutAll.
 
 ---
 
