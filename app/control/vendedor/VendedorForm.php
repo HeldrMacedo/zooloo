@@ -114,11 +114,11 @@ class VendedorForm extends TPage
         $nome->addValidation('Nome', new TRequiredValidator);
         $login->addValidation('Login', new TRequiredValidator);
         $area_id->addValidation('Área', new TRequiredValidator);
-        $coletor_id->addValidation('Setorista', new TRequiredValidator);
+        $coletor_id->addValidation('Gerente', new TRequiredValidator);
         $comissao->addValidation('Comissão', new TRequiredValidator);
         $limite_venda->addValidation('Limite de Venda', new TRequiredValidator);
         $exibe_premiacao->addValidation('Exibe Premiação', new TRequiredValidator);
-
+        
         // Tamanhos
         $id->setEditable(false);
         $id->setSize('50%');

@@ -32,7 +32,7 @@ class GerenteForm extends TPage
         $id            = new TEntry('coletor_id');
         $nome          = new TEntry('nome');
         $login         = new TEntry('login');
-        $senha         = new TPassword('password ');
+        $senha         = new TPassword('password');
         $confirmar_senha = new TPassword('repassword');
         $area_id = new TDBCombo('area_id', 'permission', 'Area', 'area_id', 'descricao');
         $ativo = new TCombo('ativo');
@@ -57,9 +57,9 @@ class GerenteForm extends TPage
         $ativo->setSize('100%');
 
         $this->form->addFields([new TLabel('Id')], [$id]);
-        $this->form->addFields([new TLabel('Nome')], [$nome], [new TLabel('Login')], [$login]);
-        $this->form->addFields([new TLabel('Senha')], [$senha], [new TLabel('Confirmar Senha')], [$confirmar_senha]);
-        $this->form->addFields([new TLabel('Area')], [$area_id], [new TLabel('Ativo')], [$ativo]);
+        $this->form->addFields([new TLabel('Nome <span style="color:red;">*</span>')], [$nome], [new TLabel('Login <span style="color:red;">*</span>')], [$login]);
+        $this->form->addFields([new TLabel('Senha <span style="color:red;">*</span>')], [$senha], [new TLabel('Confirmar Senha <span style="color:red;">*</span>')], [$confirmar_senha]);
+        $this->form->addFields([new TLabel('Area <span style="color:red;">*</span>')], [$area_id], [new TLabel('Ativo')], [$ativo]);
 
         $this->form->addHeaderActionLink(_t('Close'), new TAction([$this, 'onClose']), 'fa:times red');
 

@@ -288,31 +288,18 @@ http://localhost
 
 ## Sistema Original (Referência)
 
-O sistema Java fica em `C:/desenvolvimento/allsystem/jballsystem/allsystem/`.
+O sistema Java de referência está localizado no diretório irmão `allsystem`, acessível pelo caminho relativo: `../jballsystem/allsystem/` (assumindo que ambos os projetos estão sob a pasta base `desenvolvimento`, seja no Windows ou Linux).
 - As entidades do domínio estão em `src/main/java/br/com/allsystem/app/domain/`
+- Os repositorios estao em `src/main/java/br/com/allsystem/app/repository/`
+- As classes de servico estao em `src/main/java/br/com/allsystem/app/service/`
+- Os controllers estao em `src/main/java/br/com/allsystem/app/web/rest/`
+- As class de configuracao de servicos estao em `src/main/java/br/com/allsystem/app/config/`
+- Font end, arquivos de gerenciamento de usuários estão em `src\main\webapp\app\account`
+- Arquivos front end admin estão em `src\main\webapp\app\admin`
+- Front end, entidades estão em `src\main\webapp\app\entities`
+- Front end, model estão em `src\main\webapp\app\shared\model`
 - Usa o mesmo banco `jb` como referência de schema e dados
 - Sempre consultar o sistema original quando precisar entender regras de negócio não documentadas
 
 
 ---
-
-# Reversa
-
-> Framework de Engenharia Reversa instalado neste projeto.
-
-## Como usar
-
-Digite `/reversa` para ativar o Reversa e iniciar ou retomar a análise do projeto.
-
-## Comportamento ao ativar
-
-Quando o usuário digitar `/reversa` ou a palavra `reversa` sozinha em uma mensagem:
-
-1. Ative o skill `reversa` disponível em `.claude/skills/reversa/SKILL.md`
-2. Se não encontrar em `.claude/skills/`, tente `.agents/skills/reversa/SKILL.md`
-3. Leia o SKILL.md na íntegra e siga exatamente as instruções do Reversa
-
-## Regra não-negociável
-
-Nunca apague, modifique ou sobrescreva arquivos pré-existentes do projeto legado.
-O Reversa escreve **apenas** em `.reversa/` e `_reversa_sdd/`.
