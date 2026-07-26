@@ -183,6 +183,7 @@ namespace {
         public static function registerLogout(): void { self::$logoutCount++; }
     }
 
+    require_once __DIR__ . '/../app/service/auth/TerminalAuthHelper.php';
     require_once __DIR__ . '/../app/service/auth/ApplicationAuthenticationRestService.php';
     require_once __DIR__ . '/../app/service/auth/AuthRateLimiter.php';
 
@@ -193,6 +194,50 @@ namespace {
             'id' => 10, 'login' => 'admin', 'name' => 'Admin',
             'email' => 'a@b.c', 'active' => 'Y',
         ];
+    }
+
+    /** Serial padrão usado nos testes de login bem-sucedido. */
+    function defaultSerial(): string {
+        return 'DEV-SERIAL-001';
+    }
+
+    /**
+     * Semeia cad_terminal no MockRepository.
+     * multi_usuario=S por padrão para permitir login sem cad_vendedor nos testes legados.
+     */
+    function seedTerminal(array $overrides = []): object {
+        $t = (object) array_merge([
+            'terminal_id'   => 1,
+            'vendedor_id'   => 7,
+            'serial'        => defaultSerial(),
+            'tipo'          => 'APP',
+            'multi_usuario' => 'S',
+            'ativo'         => 'S',
+        ], $overrides);
+        MockRepository::$data['Terminal'] = [$t];
+        return $t;
+    }
+
+    function makeVendedor(array $overrides = []): object {
+        return (object) array_merge([
+            'vendedor_id' => 7, 'area_id' => 1, 'coletor_id' => 2, 'nome' => 'Vendedor',
+            'comissao' => 5.0, 'limite_venda' => 1000.0, 'tipo_limite' => 'D',
+            'treinamento' => 'N', 'ativo' => 'S', 'usuario_id' => 10,
+            'exibe_comissao' => 'S', 'exibe_premiacao' => 'S',
+            'pode_cancelar' => 'S', 'pode_cancelar_qtde' => 3, 'pode_cancelar_tempo' => '10',
+            'pode_reimprimir' => 'S', 'pode_reimprimir_qtde' => 2, 'pode_reimprimir_tempo' => '5',
+            'pode_reimprimir_outro' => 'N', 'pode_reimprimir_sort_pago' => 'N',
+            'pode_reimprimir_sort_naopg' => 'S', 'pode_reimprimir_sort_pago_outro' => 'N',
+            'pode_reimprimir_sort_naopg_outro' => 'N', 'pode_pagar' => 'S', 'pode_pagar_outro' => 'N',
+        ], $overrides);
+    }
+
+    function loginPayload(array $extra = []): array {
+        return ['data' => array_merge([
+            'login'    => 'admin',
+            'password' => '1',
+            'serial'   => defaultSerial(),
+        ], $extra)];
     }
 
     function resetAuthState(): void {
@@ -231,7 +276,7 @@ namespace {
     test('login: credenciais inválidas retornam mensagem genérica (sem user enumeration)', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = null;
-        $r = ApplicationAuthenticationRestService::login(['data' => ['login' => 'x', 'password' => 'y']]);
+        $r = ApplicationAuthenticationRestService::login(loginPayload(['login' => 'x', 'password' => 'y']));
         assertSameValue(false, $r['success']);
         assertContainsText('autenticar', $r['message']);
     });
@@ -240,55 +285,111 @@ namespace {
         resetAuthState();
         $u = makeUser(); $u->active = 'N';
         ApplicationAuthenticationService::$fakeUser = $u;
-        $r = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => 'x']]);
+        $r = ApplicationAuthenticationRestService::login(loginPayload(['password' => 'x']));
         assertSameValue(false, $r['success']);
         assertContainsText('autenticar', $r['message']);
+    });
+
+    test('login: serial vazio retorna mensagem de terminal', function () {
+        resetAuthState();
+        ApplicationAuthenticationService::$fakeUser = makeUser();
+        $r = ApplicationAuthenticationRestService::login(['data' => [
+            'login' => 'admin', 'password' => '1', 'serial' => '',
+        ]]);
+        assertSameValue(false, $r['success']);
+        assertContainsText('Serial', $r['message']);
+    });
+
+    test('login: serial inexistente falha com mensagem explícita', function () {
+        resetAuthState();
+        ApplicationAuthenticationService::$fakeUser = makeUser();
+        seedTerminal(); // serial diferente do enviado
+        $r = ApplicationAuthenticationRestService::login(loginPayload(['serial' => 'NAO-EXISTE']));
+        assertSameValue(false, $r['success']);
+        assertContainsText('não cadastrado', $r['message']);
+        assertTrue(empty(MockRepository::$data['MobAuthToken'] ?? []), 'não deve emitir tokens');
+    });
+
+    test('login: terminal inativo falha', function () {
+        resetAuthState();
+        ApplicationAuthenticationService::$fakeUser = makeUser();
+        seedTerminal(['ativo' => 'N', 'multi_usuario' => 'S']);
+        $r = ApplicationAuthenticationRestService::login(loginPayload());
+        assertSameValue(false, $r['success']);
+        assertContainsText('bloqueado', $r['message']);
+    });
+
+    test('login: terminal de outro vendedor com multi_usuario=N falha', function () {
+        resetAuthState();
+        ApplicationAuthenticationService::$fakeUser = makeUser();
+        MockRepository::$data['Vendedor'] = [makeVendedor(['vendedor_id' => 7])];
+        seedTerminal(['vendedor_id' => 99, 'multi_usuario' => 'N']);
+        $r = ApplicationAuthenticationRestService::login(loginPayload());
+        assertSameValue(false, $r['success']);
+        assertContainsText('vinculado', $r['message']);
+    });
+
+    test('login: multi_usuario=S permite vendedor diferente', function () {
+        resetAuthState();
+        ApplicationAuthenticationService::$fakeUser = makeUser();
+        MockRepository::$data['Vendedor'] = [makeVendedor(['vendedor_id' => 7])];
+        seedTerminal(['vendedor_id' => 99, 'multi_usuario' => 'S']);
+        $r = ApplicationAuthenticationRestService::login(loginPayload());
+        assertSameValue(true, $r['success']);
+        assertSameValue(1, $r['terminal']['terminal_id']);
+        assertSameValue('S', $r['terminal']['multi_usuario']);
     });
 
     test('login: sucesso emite access + refresh, persiste ambos, devolve vendedor=null sem cad_vendedor', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
-        $r = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        seedTerminal(['multi_usuario' => 'S']);
+        $r = ApplicationAuthenticationRestService::login(loginPayload());
         assertSameValue(true, $r['success']);
         assertTrue(!empty($r['token']), 'access token ausente');
         assertTrue(!empty($r['refresh_token']), 'refresh token ausente');
         assertTrue($r['token'] !== $r['refresh_token'], 'access e refresh devem diferir');
         assertSameValue(null, $r['vendedor']);
         assertTrue(isset($r['warning']));
+        assertSameValue(1, $r['terminal']['terminal_id']);
+        assertSameValue(defaultSerial(), $r['terminal']['serial']);
         $persisted = MockRepository::$data['MobAuthToken'] ?? [];
         assertSameValue(2, count($persisted));
     });
 
-    test('login: devolve vendedor + permissoes quando cad_vendedor existe', function () {
+    test('login: devolve vendedor + permissoes + terminal quando cad_vendedor existe', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
-        $v = (object) [
-            'vendedor_id' => 7, 'area_id' => 1, 'coletor_id' => 2, 'nome' => 'Vendedor',
-            'comissao' => 5.0, 'limite_venda' => 1000.0, 'tipo_limite' => 'D',
-            'treinamento' => 'N', 'ativo' => 'S', 'usuario_id' => 10,
-            'exibe_comissao' => 'S', 'exibe_premiacao' => 'S',
-            'pode_cancelar' => 'S', 'pode_cancelar_qtde' => 3, 'pode_cancelar_tempo' => '10',
-            'pode_reimprimir' => 'S', 'pode_reimprimir_qtde' => 2, 'pode_reimprimir_tempo' => '5',
-            'pode_reimprimir_outro' => 'N', 'pode_reimprimir_sort_pago' => 'N',
-            'pode_reimprimir_sort_naopg' => 'S', 'pode_reimprimir_sort_pago_outro' => 'N',
-            'pode_reimprimir_sort_naopg_outro' => 'N', 'pode_pagar' => 'S', 'pode_pagar_outro' => 'N',
-        ];
-        MockRepository::$data['Vendedor'] = [$v];
+        MockRepository::$data['Vendedor'] = [makeVendedor()];
+        seedTerminal(['vendedor_id' => 7, 'multi_usuario' => 'N']);
 
-        $r = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        $r = ApplicationAuthenticationRestService::login(loginPayload());
         assertSameValue(7, $r['vendedor']['vendedor_id']);
         assertSameValue('S', $r['permissoes']['pode_cancelar']);
         assertSameValue(3, $r['permissoes']['pode_cancelar_qtde']);
+        assertSameValue(1, $r['terminal']['terminal_id']);
+    });
+
+    test('login: JWT access contém terminal_id e serial', function () {
+        resetAuthState();
+        ApplicationAuthenticationService::$fakeUser = makeUser();
+        seedTerminal(['multi_usuario' => 'S', 'terminal_id' => 42, 'serial' => defaultSerial()]);
+        $r = ApplicationAuthenticationRestService::login(loginPayload());
+        assertSameValue(true, $r['success']);
+        $parts = explode('.', $r['token']);
+        $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
+        assertSameValue(42, $payload['terminal_id']);
+        assertSameValue(defaultSerial(), $payload['serial']);
     });
 
     test('rate-limit: 4ª tentativa com login_max=3 bloqueia', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = null;
         for ($i = 0; $i < 3; $i++) {
-            ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => 'x']]);
+            ApplicationAuthenticationRestService::login(loginPayload(['password' => 'x']));
         }
         http_response_code(200);
-        $r = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => 'x']]);
+        $r = ApplicationAuthenticationRestService::login(loginPayload(['password' => 'x']));
         assertSameValue(false, $r['success']);
         assertContainsText('Muitas tentativas', $r['message']);
         assertSameValue(429, http_response_code());
@@ -297,15 +398,16 @@ namespace {
 
     test('rate-limit: sucesso limpa contador do login', function () {
         resetAuthState();
+        seedTerminal(['multi_usuario' => 'S']);
         ApplicationAuthenticationService::$fakeUser = null;
         for ($i = 0; $i < 2; $i++) {
-            ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => 'x']]);
+            ApplicationAuthenticationRestService::login(loginPayload(['password' => 'x']));
         }
         ApplicationAuthenticationService::$fakeUser = makeUser();
-        ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => 'x']]);
+        ApplicationAuthenticationRestService::login(loginPayload(['password' => 'x']));
         // outras 3 falhas devem ser permitidas (contador zerou)
         ApplicationAuthenticationService::$fakeUser = null;
-        $r = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => 'x']]);
+        $r = ApplicationAuthenticationRestService::login(loginPayload(['password' => 'x']));
         assertSameValue(false, $r['success']);
         assertContainsText('autenticar', $r['message']); // não é "muitas tentativas"
     });
@@ -319,7 +421,8 @@ namespace {
     test('validateToken: aceita access válido recém-emitido', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
-        $login = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        seedTerminal(['multi_usuario' => 'S']);
+        $login = ApplicationAuthenticationRestService::login(loginPayload());
         $v = ApplicationAuthenticationRestService::validateToken(['token' => $login['token']]);
         assertSameValue(true, $v['success']);
         assertSameValue(10, $v['user']['id']);
@@ -328,7 +431,8 @@ namespace {
     test('validateToken: rejeita refresh-token quando vem na rota de access', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
-        $login = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        seedTerminal(['multi_usuario' => 'S']);
+        $login = ApplicationAuthenticationRestService::login(loginPayload());
         $v = ApplicationAuthenticationRestService::validateToken(['token' => $login['refresh_token']]);
         assertSameValue(false, $v['success']);
     });
@@ -336,7 +440,8 @@ namespace {
     test('validateToken: token com jti revogado é rejeitado', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
-        $login = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        seedTerminal(['multi_usuario' => 'S']);
+        $login = ApplicationAuthenticationRestService::login(loginPayload());
         // revoga manualmente o access persistido
         foreach (MockRepository::$data['MobAuthToken'] as $t) {
             if ($t->token_type === 'access') $t->revoke('test');
@@ -350,7 +455,8 @@ namespace {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
         SystemUser::$fakeUser = makeUser();
-        $login = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        seedTerminal(['multi_usuario' => 'S']);
+        $login = ApplicationAuthenticationRestService::login(loginPayload());
         $r = ApplicationAuthenticationRestService::refreshToken(['refresh_token' => $login['refresh_token']]);
         assertSameValue(true, $r['success']);
         assertTrue($r['token'] !== $login['token']);
@@ -367,7 +473,8 @@ namespace {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
         SystemUser::$fakeUser = makeUser();
-        $login = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        seedTerminal(['multi_usuario' => 'S']);
+        $login = ApplicationAuthenticationRestService::login(loginPayload());
         ApplicationAuthenticationRestService::refreshToken(['refresh_token' => $login['refresh_token']]);
         // tentativa 2 com o MESMO refresh antigo: deve falhar e revogar tudo
         $r2 = ApplicationAuthenticationRestService::refreshToken(['refresh_token' => $login['refresh_token']]);
@@ -382,7 +489,8 @@ namespace {
     test('refreshToken: access-token (não-refresh) é rejeitado', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
-        $login = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        seedTerminal(['multi_usuario' => 'S']);
+        $login = ApplicationAuthenticationRestService::login(loginPayload());
         $r = ApplicationAuthenticationRestService::refreshToken(['refresh_token' => $login['token']]);
         assertSameValue(false, $r['success']);
     });
@@ -390,7 +498,8 @@ namespace {
     test('logout: revoga access e refresh persistidos', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
-        $login = ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        seedTerminal(['multi_usuario' => 'S']);
+        $login = ApplicationAuthenticationRestService::login(loginPayload());
         $r = ApplicationAuthenticationRestService::logout([
             'token' => $login['token'],
             'refresh_token' => $login['refresh_token'],
@@ -412,8 +521,9 @@ namespace {
     test('logoutAll: revoga todos os tokens ativos do usuário', function () {
         resetAuthState();
         ApplicationAuthenticationService::$fakeUser = makeUser();
-        ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
-        ApplicationAuthenticationRestService::login(['data' => ['login' => 'admin', 'password' => '1']]);
+        seedTerminal(['multi_usuario' => 'S']);
+        ApplicationAuthenticationRestService::login(loginPayload());
+        ApplicationAuthenticationRestService::login(loginPayload());
         $r = ApplicationAuthenticationRestService::logoutAll(['_auth' => ['id' => 10]]);
         assertSameValue(true, $r['success']);
         foreach (MockRepository::$data['MobAuthToken'] as $t) {

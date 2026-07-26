@@ -14,6 +14,10 @@
                 <icon>fas:id-badge fa-fw</icon>
                 <action>VendedorList</action>
             </menuitem>
+            <menuitem label="Terminal">
+                <icon>fas:mobile-alt fa-fw</icon>
+                <action>TerminalList</action>
+            </menuitem>
             
         </menu>
     </menuitem>

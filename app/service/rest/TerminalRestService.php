@@ -5,11 +5,18 @@ use Adianti\Database\TRepository;
 use Adianti\Database\TCriteria;
 use Adianti\Database\TFilter;
 
+/**
+ * REST de terminal para o app móvel.
+ *
+ * Não autocadastra dispositivo: o serial deve ser pré-cadastrado em cad_terminal
+ * pelo back-office (TerminalList / TerminalForm).
+ */
 class TerminalRestService
 {
     /**
-     * Registra ou atualiza o terminal do dispositivo.
-     * Busca pelo serial; se não existir, cria novo vinculado ao vendedor autenticado.
+     * Confirma o terminal do dispositivo para o vendedor autenticado.
+     * Busca pelo serial; se existir e estiver autorizado, devolve os dados.
+     * Não cria registro novo.
      */
     public static function registrar($param)
     {
@@ -23,7 +30,7 @@ class TerminalRestService
             {
                 throw new Exception('Usuário não autenticado');
             }
-            if (empty($serial))
+            if ($serial === '')
             {
                 throw new Exception('Serial do dispositivo é obrigatório');
             }
@@ -31,43 +38,32 @@ class TerminalRestService
             TTransaction::open('permission');
 
             $vendedor = self::getVendedor($usuario_id);
+            $terminalData = TerminalAuthHelper::validateForLogin($serial, $vendedor->vendedor_id);
 
-            $repo     = new TRepository('Terminal');
-            $criteria = new TCriteria;
-            $criteria->add(new TFilter('vendedor_id', '=', $vendedor->vendedor_id));
-            $criteria->add(new TFilter('serial', '=', $serial));
-            $terminais = $repo->load($criteria);
-
-            if (!empty($terminais))
+            // Atualiza tipo se informado (validateForLogin já exige ativo=S).
+            $terminal = TerminalAuthHelper::findBySerial($serial);
+            if ($terminal && $tipo !== '')
             {
-                $terminal       = $terminais[0];
                 $terminal->tipo = $tipo;
-                $terminal->ativo = 'S';
                 $terminal->store();
-            }
-            else
-            {
-                $terminal              = new Terminal;
-                $terminal->vendedor_id = $vendedor->vendedor_id;
-                $terminal->serial      = $serial;
-                $terminal->tipo        = $tipo;
-                $terminal->multi_usuario = 'N';
-                $terminal->ativo       = 'S';
-                $terminal->store();
+                $terminalData['tipo'] = (string) $terminal->tipo;
             }
 
             TTransaction::close();
 
             return [
-                'terminal_id'  => (int) $terminal->terminal_id,
-                'vendedor_id'  => (int) $terminal->vendedor_id,
-                'serial'       => $terminal->serial,
-                'tipo'         => $terminal->tipo,
+                'terminal_id'  => $terminalData['terminal_id'],
+                'vendedor_id'  => (int) $vendedor->vendedor_id,
+                'serial'       => $terminalData['serial'],
+                'tipo'         => $terminalData['tipo'],
             ];
         }
         catch (Exception $e)
         {
-            TTransaction::rollback();
+            if (TTransaction::get())
+            {
+                TTransaction::rollback();
+            }
             throw $e;
         }
     }

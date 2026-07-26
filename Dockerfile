@@ -12,7 +12,7 @@ RUN apt update && \
         zip \
         unzip \
         lsb-release \
-        libaio1 \
+        libaio1t64 \
         libmecab2 \
         libnuma1 \
         libfreetype6-dev \

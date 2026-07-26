@@ -146,7 +146,7 @@ app/
 - `cad_coletor` — Coletores/Gerentes (vinculado a area, pode ter acesso_web)
 - `cad_extracao` — Extrações com dias da semana, hora_limite, premiacao_maxima
 - `cad_modalidade` — Modalidades de jogo (vinculado a int_jogo, com multiplicadores)
-- `cad_terminal` — Terminais de venda
+- `cad_terminal` — Terminais de venda (serial pré-cadastrado; login mobile + bilhetes). Ver `docs/terminal-binding.md`
 
 **Configuração:**
 - `cfg_area_extracao` — Quais extrações estão ativas por área

@@ -457,14 +457,23 @@ class BilheteRestService
 
     private static function validarTerminal($terminal_id, $vendedor_id)
     {
-        $repo = new TRepository('Terminal');
-        $criteria = new TCriteria;
-        $criteria->add(new TFilter('terminal_id', '=', $terminal_id));
-        $criteria->add(new TFilter('vendedor_id', '=', $vendedor_id));
-        $criteria->add(new TFilter('ativo', '=', 'S'));
-        $lista = $repo->load($criteria);
-
-        if (empty($lista)) throw new Exception('Terminal inválido para este vendedor');
+        try
+        {
+            TerminalAuthHelper::validateForBilhete((int) $terminal_id, $vendedor_id);
+        }
+        catch (Exception $e)
+        {
+            // Mantém mensagem legada para o app quando o terminal não se aplica ao vendedor.
+            $msg = $e->getMessage();
+            if (
+                strpos($msg, 'não cadastrado') !== false
+                || strpos($msg, 'bloqueado') !== false
+                || strpos($msg, 'vinculado') !== false
+            ) {
+                throw new Exception('Terminal inválido para este vendedor');
+            }
+            throw $e;
+        }
     }
 
     private static function validarSorteioAberto($sorteio_id, $area_id)

@@ -19,7 +19,9 @@ use \Firebase\JWT\Key;
  *
  * Compatibilidade: o método `login` continua devolvendo `token`/`expires_at`
  * (= access-token) como antes; campos novos: `refresh_token`,
- * `refresh_expires_at`, `vendedor`, `permissoes`.
+ * `refresh_expires_at`, `vendedor`, `permissoes`, `terminal`.
+ *
+ * Login mobile exige `data.serial` do dispositivo (pré-cadastrado em cad_terminal).
  */
 class ApplicationAuthenticationRestService implements AdiantiRestService
 {
@@ -66,10 +68,10 @@ class ApplicationAuthenticationRestService implements AdiantiRestService
         return (array) JWT::decode($token, new Key(self::jwtKey(), 'HS256'));
     }
 
-    private static function buildAccessPayload($user, $jti)
+    private static function buildAccessPayload($user, $jti, $terminal = null)
     {
         $now = time();
-        return [
+        $payload = [
             'jti'       => $jti,
             'iat'       => $now,
             'exp'       => $now + self::ACCESS_TTL_SECONDS,
@@ -80,12 +82,17 @@ class ApplicationAuthenticationRestService implements AdiantiRestService
             'username'  => $user->name,
             'usermail'  => $user->email,
         ];
+        if ($terminal) {
+            $payload['terminal_id'] = (int) $terminal['terminal_id'];
+            $payload['serial']      = (string) $terminal['serial'];
+        }
+        return $payload;
     }
 
-    private static function buildRefreshPayload($user, $jti)
+    private static function buildRefreshPayload($user, $jti, $terminal = null)
     {
         $now = time();
-        return [
+        $payload = [
             'jti'    => $jti,
             'iat'    => $now,
             'exp'    => $now + self::REFRESH_TTL_SECONDS,
@@ -93,6 +100,11 @@ class ApplicationAuthenticationRestService implements AdiantiRestService
             'userid' => $user->id,
             'user'   => $user->login,
         ];
+        if ($terminal) {
+            $payload['terminal_id'] = (int) $terminal['terminal_id'];
+            $payload['serial']      = (string) $terminal['serial'];
+        }
+        return $payload;
     }
 
     /**
@@ -168,16 +180,23 @@ class ApplicationAuthenticationRestService implements AdiantiRestService
 
     /**
      * Login mobile.
-     * Request: { data: { login, password } }
+     * Request: { data: { login, password, serial } }
+     *
+     * `serial` é obrigatório e deve existir em cad_terminal (pré-cadastro no back-office).
      */
     public static function login($param)
     {
         $login_raw = trim((string)($param['data']['login']    ?? ''));
         $password  = (string)($param['data']['password'] ?? '');
+        $serial    = trim((string)($param['data']['serial']   ?? ''));
         $ip        = self::clientIp();
 
         if ($login_raw === '' || $password === '') {
             return ['success' => false, 'message' => self::GENERIC_INVALID_MSG];
+        }
+
+        if ($serial === '') {
+            return ['success' => false, 'message' => 'Serial do terminal é obrigatório.'];
         }
 
         // rate-limit (sempre antes de tocar no banco)
@@ -206,16 +225,26 @@ class ApplicationAuthenticationRestService implements AdiantiRestService
         }
 
         try {
+            TTransaction::open('permission');
+            $vendedor_data = self::resolveVendedor($user->id);
+            $vendedor_id = $vendedor_data['vendedor']['vendedor_id'] ?? null;
+
+            try {
+                $terminal = TerminalAuthHelper::validateForLogin($serial, $vendedor_id);
+            } catch (Exception $termEx) {
+                TTransaction::close();
+                // Falha de terminal não conta como rate-limit de credenciais (operacional).
+                return ['success' => false, 'message' => $termEx->getMessage()];
+            }
+
             $access_jti  = self::newJti();
             $refresh_jti = self::newJti();
             $now         = time();
-            $access      = self::encodeJwt(self::buildAccessPayload($user,  $access_jti));
-            $refresh     = self::encodeJwt(self::buildRefreshPayload($user, $refresh_jti));
+            $access      = self::encodeJwt(self::buildAccessPayload($user,  $access_jti, $terminal));
+            $refresh     = self::encodeJwt(self::buildRefreshPayload($user, $refresh_jti, $terminal));
 
-            TTransaction::open('permission');
             self::persistToken($access_jti,  $user->id, 'access',  $now + self::ACCESS_TTL_SECONDS,  null, false);
             self::persistToken($refresh_jti, $user->id, 'refresh', $now + self::REFRESH_TTL_SECONDS, null, false);
-            $vendedor_data = self::resolveVendedor($user->id);
             TTransaction::close();
 
             if (class_exists('AuthRateLimiter')) AuthRateLimiter::registerSuccess($login_raw, $ip);
@@ -237,6 +266,7 @@ class ApplicationAuthenticationRestService implements AdiantiRestService
                 'expires_at'          => date('Y-m-d H:i:s', $now + self::ACCESS_TTL_SECONDS),
                 'refresh_token'       => $refresh,
                 'refresh_expires_at'  => date('Y-m-d H:i:s', $now + self::REFRESH_TTL_SECONDS),
+                'terminal'            => $terminal,
             ];
             if ($vendedor_data) {
                 $response['vendedor']   = $vendedor_data['vendedor'];
@@ -348,6 +378,15 @@ class ApplicationAuthenticationRestService implements AdiantiRestService
                 return ['success' => false, 'message' => 'Usuário inativo'];
             }
 
+            // preserva binding de terminal do refresh anterior (quando existir)
+            $terminal = null;
+            if (!empty($decoded['terminal_id'])) {
+                $terminal = [
+                    'terminal_id' => (int) $decoded['terminal_id'],
+                    'serial'      => (string) ($decoded['serial'] ?? ''),
+                ];
+            }
+
             // rotação: revoga refresh antigo, emite novo par
             $old = MobAuthToken::find($jti);
             if ($old) $old->revoke('rotated');
@@ -355,8 +394,8 @@ class ApplicationAuthenticationRestService implements AdiantiRestService
             $now             = time();
             $new_access_jti  = self::newJti();
             $new_refresh_jti = self::newJti();
-            $access          = self::encodeJwt(self::buildAccessPayload($user,  $new_access_jti));
-            $new_refresh     = self::encodeJwt(self::buildRefreshPayload($user, $new_refresh_jti));
+            $access          = self::encodeJwt(self::buildAccessPayload($user,  $new_access_jti, $terminal));
+            $new_refresh     = self::encodeJwt(self::buildRefreshPayload($user, $new_refresh_jti, $terminal));
 
             self::persistToken($new_access_jti,  $user->id, 'access',  $now + self::ACCESS_TTL_SECONDS,  $jti, false);
             self::persistToken($new_refresh_jti, $user->id, 'refresh', $now + self::REFRESH_TTL_SECONDS, $jti, false);
