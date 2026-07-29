@@ -3,10 +3,8 @@
 **Data da análise:** 2026-07-17  
 **Conclusão:** o zooloo **não está 100% implementado** em relação ao allsystem. Cobre bem o esqueleto de cadastros e configurações e tem a maioria das telas operacionais/relatórios **existentes**, mas a **lógica de negócio de várias telas é parcial** — especialmente descarrego, consulta de vendas, premiação, resultado JB (sorteio automático) e todo o stack de **Bilhetinho**.
 
-| Projeto | Caminho | Stack |
-|---|---|---|
-| **allsystem** (legado) | `C:\desenvolvimento\jballsystem\allsystem\` | Java/Spring Boot + Angular (JHipster) |
-| **zooloo** (reescrita) | `C:\desenvolvimento\zooloo\` | PHP + Adianti Framework 8.1 |
+| **allsystem / jballsystem** (legado) | `../jballsystem/allsystem/` (ou `desenvolvimento/jballsystem`) | Java/Spring Boot + Angular (JHipster) |
+| **zooloo** (reescrita) | `./` (ou `desenvolvimento/zooloo`) | PHP + Adianti Framework 8.1 |
 
 ---
 

@@ -2,9 +2,9 @@
 
 ## Visão Geral
 
-**Zooloo** é uma reescrita em PHP do sistema **allsystem** (originalmente Java/Spring Boot com JHipster). Trata-se de um sistema de gestão de banca de loteria — especificamente **Jogo do Bicho** e modalidades derivadas (Bilhetinho, Quininha, Seninha, Lotinha, etc.).
+**Zooloo** é uma reescrita em PHP do sistema base legado **jballsystem** (originalmente Java/Spring Boot com JHipster). Trata-se de um sistema de gestão de banca de loteria — especificamente **Jogo do Bicho** e modalidades derivadas (Bilhetinho, Quininha, Seninha, Lotinha, etc.).
 
-O sistema original fica em `C:/desenvolvimento/allsystem/jballsystem/allsystem/` (Java/JHipster). O novo sistema zooloo usa o **Adianti Framework 8.1** com PHP e mantém compatibilidade total com o banco de dados do sistema original.
+O sistema base legado fica localizado no diretório irmão `../jballsystem` (ou `desenvolvimento/jballsystem`). O novo sistema zooloo usa o **Adianti Framework 8.1** com PHP, operando no banco de dados oficial **`applications`** (PostgreSQL 15), mantendo o banco **`jb`** apenas como referência legada.
 
 ---
 
@@ -31,8 +31,8 @@ zooloo-php-1       — PHP CLI container
 
 | Banco | Uso |
 |---|---|
-| `applications` | Banco do zooloo (PHP) — tabelas do sistema e do negócio |
-| `jb` | Banco legado do allsystem (Java) — mesmo schema de negócio |
+| `applications` | Banco oficial do zooloo (PHP) — banco ativo deste novo projeto |
+| `jb` | Banco legado do jballsystem (Java) — referência legada de origem |
 
 Credenciais em `app/config/permission.php`:
 - host: `postgres` (dentro do Docker), `localhost` (externamente)
@@ -279,7 +279,7 @@ Envelope de resposta: `{ "status": "success"|"error", "data": ... }`.
 - `rest_key` global (Basic auth legada): `zooloo_api_key_2025`.
 
 > Documentação operacional completa da auth (diagrama, checklist de produção,
-> troubleshooting): `C:/desenvolvimento/app-zooloo/README-AUTH.md`.
+> troubleshooting): `../app-zooloo/docs/README-AUTH.md`.
 
 ---
 
