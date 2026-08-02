@@ -27,12 +27,17 @@ class MovJbSortPalpite extends TRecord
         parent::addAttribute('jogou_colocacao_08');
         parent::addAttribute('jogou_colocacao_09');
         parent::addAttribute('jogou_colocacao_10');
-        parent::addAttribute('premio_colocacao_01');
-        parent::addAttribute('premio_colocacao_02');
-        parent::addAttribute('premio_colocacao_03');
-        parent::addAttribute('premio_colocacao_04');
-        parent::addAttribute('premio_colocacao_05');
+        for ($i = 1; $i <= 10; $i++) {
+            $suffix = str_pad((string) $i, 2, '0', STR_PAD_LEFT);
+            parent::addAttribute('premio_colocacao_' . $suffix);
+            parent::addAttribute('ganhou_colocacao_' . $suffix);
+            parent::addAttribute('pago_colocacao_' . $suffix);
+            parent::addAttribute('pago_data_colocacao_' . $suffix);
+            parent::addAttribute('processado_colocacao_' . $suffix);
+        }
+        parent::addAttribute('pago_usuario_id');
         parent::addAttribute('ganhou_premio_total');
         parent::addAttribute('pago_premio_total');
+        parent::addAttribute('pago_data_premio_total');
     }
 }

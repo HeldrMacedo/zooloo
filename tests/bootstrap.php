@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+putenv('APP_ENV=test');
+putenv('DATABASE_NAME=teste');
+$_ENV['APP_ENV'] = 'test';
+$_ENV['DATABASE_NAME'] = 'teste';
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 $GLOBALS['__tests'] = [];

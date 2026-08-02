@@ -137,34 +137,9 @@ class BilheteRestService
                     $jbSorteio->sorteado_valor_pago = 0;
                     $jbSorteio->store();
 
-                    $jb_sorteio_id = (int) $jbSorteio->jb_sorteio_id;
+                    // A trigger trg_mv_jb_sorteio (func_trg_mv_jb_sorteio_atualiza_palpites)
+                    // gera automaticamente os registros na tabela mov_jb_sort_palpite ao armazenar $jbSorteio.
 
-                    // Insere um registro de palpite por número apostado
-                    foreach ($mod['palpites'] as $numero)
-                    {
-                        $palpite                = new MovJbSortPalpite;
-                        $palpite->jb_sorteio_id = $jb_sorteio_id;
-                        $palpite->jb_id         = $jb_id;
-                        $palpite->sorteio_id    = $sorteio_id;
-                        $palpite->modalidade_id = $mod['modalidade_id'];
-                        $palpite->palpite       = $numero;
-                        $palpite->valor_palpite = $mod['valor_palpite'];
-                        // Colocações jogadas
-                        for ($c = 1; $c <= 10; $c++)
-                        {
-                            $campo = 'jogou_colocacao_' . str_pad($c, 2, '0', STR_PAD_LEFT);
-                            $palpite->$campo = ($c >= $mod['colocao_inicial'] && $c <= $mod['colocao_final']) ? 'S' : 'N';
-                        }
-                        // Prêmios zerados — triggers preenchem após sorteio
-                        for ($c = 1; $c <= 5; $c++)
-                        {
-                            $campo = 'premio_colocacao_' . str_pad($c, 2, '0', STR_PAD_LEFT);
-                            $palpite->$campo = 0;
-                        }
-                        $palpite->ganhou_premio_total = 0;
-                        $palpite->pago_premio_total   = 'N';
-                        $palpite->store();
-                    }
                 }
             }
 
