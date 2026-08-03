@@ -145,14 +145,10 @@ class BilheteRestService
 
             TTransaction::close();
 
-            return [
-                'jb_id'              => $jb_id,
-                'bilhete_numero'     => $bilhete_numero,
-                'string_autorizacao' => $string_autorizacao,
-                'total_bilhete'      => $totalBilhete,
-                'data_hora'          => $agora,
-                'vendedor_nome'      => $vendedor->nome,
-            ];
+            return self::detalhe([
+                '_auth'      => $param['_auth'],
+                'bilhete_id' => $jb_id,
+            ]);
         }
         catch (Exception $e)
         {
@@ -297,9 +293,9 @@ class BilheteRestService
             $stmtSorteios->execute([':jb_id' => $jb_id]);
             $sorteios = $stmtSorteios->fetchAll(\PDO::FETCH_ASSOC);
 
-            TTransaction::close();
-
             $area = Area::find($vendedor->area_id);
+
+            TTransaction::close();
 
             return [
                 'jb_id'              => (int) $jb->jb_id,
@@ -461,7 +457,7 @@ class BilheteRestService
                 AND ae.area_id = :area_id AND ae.ativo = true
              WHERE ms.sorteio_id = :sid
                AND ms.situacao = 'A'
-               AND e.hora_limite > CURRENT_TIME"
+               AND e.hora_limite > (NOW() AT TIME ZONE 'America/Sao_Paulo')::time"
         );
         $stmt->execute([':area_id' => $area_id, ':sid' => $sorteio_id]);
 

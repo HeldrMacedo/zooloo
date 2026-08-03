@@ -23,7 +23,7 @@ try {
         FROM mov_sorteio ms
         JOIN cad_extracao e ON e.extracao_id = ms.extracao_id
         JOIN cfg_area_extracao ae ON ae.extracao_id = e.extracao_id AND ae.ativo = true
-        WHERE ms.situacao = 'A' AND e.hora_limite > CURRENT_TIME
+        WHERE ms.situacao = 'A' AND e.hora_limite > (NOW() AT TIME ZONE 'America/Sao_Paulo')::time
         LIMIT 1
     ");
     $sorteio = $stmtSorteio->fetch(PDO::FETCH_ASSOC);
