@@ -4,6 +4,8 @@ use Adianti\Base\TStandardList;
 use Adianti\Control\TAction;
 use Adianti\Control\TPage;
 use Adianti\Core\AdiantiCoreApplication;
+use Adianti\Database\TCriteria;
+use Adianti\Database\TFilter;
 use Adianti\Database\TTransaction;
 use Adianti\Registry\TSession;
 use Adianti\Widget\Base\TElement;
@@ -42,6 +44,10 @@ class ModalidadeList extends TStandardList
         parent::setDefaultOrder('ordem');
         parent::addFilterField('apresentacao', 'like', 'apresentacao');
         parent::addFilterField('ativo', '=', 'ativo');
+
+        $criteria = new TCriteria;
+        $criteria->add(new TFilter('jogo_id', 'IN', "(SELECT jogo_id FROM int_jogo WHERE filtro_banca = 1)"));
+        parent::setCriteria($criteria);
 
         parent::setAfterSearchCallback([$this, 'onAfterSearch']);
 
