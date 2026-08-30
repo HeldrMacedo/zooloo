@@ -153,7 +153,6 @@ class MapaApostasList extends TPage
             foreach ($rows as $row) {
                 $this->datagrid->addItem($row);
             }
-            $this->datagrid->updatePage();
 
             if (empty($rows)) {
                 new TMessage('info', 'Nenhuma aposta encontrada para este sorteio!');

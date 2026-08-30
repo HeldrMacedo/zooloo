@@ -23,13 +23,14 @@ use Adianti\Wrapper\BootstrapFormBuilder;
 
 class PremiacaoList extends TPage
 {
-    // jogo_id de Quininha e Seninha para exibição especial de colocação
-    const JOGO_QUININHA = 32;
+    // jogo_id de Quininha e Seninha para exibição especial de colocação (int_jogo)
+    const JOGO_QUININHA = 25;
     const JOGO_SENINHA  = 27;
 
     protected $form;
     protected $datagrid;
     protected $pageNavigation;
+    protected $panel;
 
     public function __construct()
     {
@@ -116,6 +117,7 @@ class PremiacaoList extends TPage
         $panel = new TPanelGroup();
         $panel->add($this->datagrid)->style = 'overflow-x:auto';
         $panel->addFooter($this->pageNavigation);
+        $this->panel = $panel;
 
         $container = new TVBox;
         $container->style = 'width: 100%';
@@ -150,40 +152,45 @@ class PremiacaoList extends TPage
             TTransaction::open('permission');
             $conn = TTransaction::get();
 
-            $where  = ["sorteado = 'S'", "cancelado = 'N'"];
+            $where  = ["v.sorteado = 'S'", "v.cancelado = 'N'"];
             $params = [];
 
             if (!empty($filter['nsu'])) {
-                $where[] = 'nsu = :nsu';
+                $where[] = 'v.nsu = :nsu';
                 $params[':nsu'] = (int) $filter['nsu'];
             } else {
                 if (!empty($filter['data_ini'])) {
-                    $where[] = 'DATE(data_hora) >= :data_ini';
+                    $where[] = 'DATE(v.data_hora) >= :data_ini';
                     $params[':data_ini'] = $filter['data_ini'];
                 }
                 if (!empty($filter['data_fim'])) {
-                    $where[] = 'DATE(data_hora) <= :data_fim';
+                    $where[] = 'DATE(v.data_hora) <= :data_fim';
                     $params[':data_fim'] = $filter['data_fim'];
                 }
                 if (!empty($filter['area_id'])) {
-                    $where[] = 'area_id = :area_id';
+                    $where[] = 'v.area_id = :area_id';
                     $params[':area_id'] = $filter['area_id'];
                 }
                 if (!empty($filter['extracao_id'])) {
-                    $where[] = 'extracao_id = :extracao_id';
+                    $where[] = 'v.extracao_id = :extracao_id';
                     $params[':extracao_id'] = $filter['extracao_id'];
                 }
                 if (!empty($filter['vendedor_id'])) {
-                    $where[] = 'vendedor_id = :vendedor_id';
+                    $where[] = 'v.vendedor_id = :vendedor_id';
                     $params[':vendedor_id'] = $filter['vendedor_id'];
                 }
                 if ($filter['pago'] !== '') {
-                    $where[] = 'sorteado_pago = :pago';
+                    $where[] = 'v.sorteado_pago = :pago';
                     $params[':pago'] = $filter['pago'];
                 }
             }
 
-            $sql  = 'SELECT * FROM vw_vendajb WHERE ' . implode(' AND ', $where) . ' ORDER BY data_hora DESC LIMIT 500';
+            // vw_vendajb não expõe jogo_id; o join com cad_modalidade traz o jogo
+            // necessário para a exibição de colocação de Quininha/Seninha.
+            $sql  = 'SELECT v.*, m.jogo_id FROM vw_vendajb v'
+                  . ' LEFT JOIN cad_modalidade m ON m.modalidade_id = v.modalidade_id'
+                  . ' WHERE ' . implode(' AND ', $where)
+                  . ' ORDER BY v.data_hora DESC LIMIT 500';
             $stmt = $conn->prepare($sql);
             $stmt->execute($params);
             $rows = $stmt->fetchAll(\PDO::FETCH_OBJ);
@@ -198,7 +205,13 @@ class PremiacaoList extends TPage
                 $total_apostado += (float)$row->total_sorteio;
                 $total_premio   += (float)$row->sorteado_valor;
             }
-            $this->datagrid->updatePage();
+
+            $fmt = fn($v) => 'R$ ' . number_format($v, 2, ',', '.');
+            $this->panel->addFooter(
+                "<div style='text-align:right;padding:8px'><strong>"
+                . "Total Apostado: {$fmt($total_apostado)} | Total Prêmio: {$fmt($total_premio)}"
+                . '</strong></div>'
+            );
         } catch (Exception $e) {
             TTransaction::rollback();
             new TMessage('error', $e->getMessage());

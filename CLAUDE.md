@@ -119,10 +119,16 @@ app/
 │   ├── cli/
 │   ├── jobs/
 │   ├── log/
-│   ├── rest/
+│   ├── rest/               — serviços REST de negócio (ModalidadeRestService,
+│   │                          BilheteRestService, VendedorRestService, etc.),
+│   │                          expostos via `rest.php`
 │   └── system/
 └── view/
 ```
+
+> Não confundir `app/service/rest/` (serviços de negócio acima) com o `rest/` na raiz do
+> projeto, que contém scripts de baixo nível do roteador REST (`jwt.php`, `get-token.php`,
+> `rest-method.php`, `user-*.php`).
 
 ---
 
@@ -137,6 +143,8 @@ app/
 | `mov_*` | Movimento (transações) |
 | `int_*` | Interno/sistema |
 | `data_*` | Dados auxiliares |
+
+Dump completo do DDL das tabelas principais: `tabelas.md` (raiz do projeto).
 
 ### Tabelas Principais
 
@@ -241,6 +249,15 @@ class Xxx extends TRecord {
 - Sempre usar `TTransaction::open('permission')` e `TTransaction::close()` em bloco try/catch.
 - O nome da conexão é `'permission'` (aponta para o banco `applications`).
 
+### Consultando o Adianti Framework
+
+Regras completas em `.agents/rules/adianti.md`. Fontes locais obrigatórias antes de
+implementar/refatorar telas Adianti:
+- Exemplos atualizados (v8.4): `/home/helder/Desenvolvimento/Adianti8.4/tutor`
+- Core do framework (v8.4): `/home/helder/Desenvolvimento/Adianti8.4/framework`
+- Livro oficial conceitual (v7): `adianti7pdf_compress.pdf` (raiz do projeto)
+- Busca rápida: `python3 .agents/skills/adianti-expert/scripts/search_adianti.py "<termo>" [--source tutor|framework|book]`
+
 ---
 
 ## REST API
@@ -286,11 +303,18 @@ Envelope de resposta: `{ "status": "success"|"error", "data": ... }`.
 ## Testes
 
 Harness próprio (não-PHPUnit) em `tests/` — `test(nome, fn)` + `assert*` de `tests/bootstrap.php`.
+`tests/run.php` inclui `bootstrap.php` e depois todos os `tests/*.test.php` via `glob()`; os
+arquivos de teste individuais **não** incluem o bootstrap sozinhos, então rodar um único
+arquivo exige incluir o bootstrap manualmente (veja abaixo). Não há linter/formatter
+(phpcs, php-cs-fixer) configurado no projeto.
 
 ```bash
 composer test    # = php tests/run.php (roda todos os tests/*.test.php)
 # via Docker:
 docker exec -i applications_www sh -lc "cd /var/www/html && composer test"
+
+# rodar um único arquivo de teste:
+php -r "require 'tests/bootstrap.php'; require 'tests/NOME-DO-ARQUIVO.test.php'; exit(runTests());"
 ```
 
 Cobertura de auth: `tests/auth-rest-service.test.php` (login/refresh/logout/rotação/replay/
@@ -309,6 +333,12 @@ processo e declarações sem guarda causam fatal de redeclaração.
   com hosts explícitos; binding `terminal_id`/serial no JWT; auditoria de refresh/logoutAll.
 
 ---
+
+## Documentação Adicional (`docs/`)
+
+- `docs/terminal-binding.md` — binding de terminal/serial no login mobile (ver `cad_terminal` acima).
+- `docs/mobile-planejamento.md` — planejamento do app mobile (`app-zooloo`).
+- `docs/comparativo-allsystem-zooloo.md` — comparativo de paridade entre o legado `jballsystem` e o zooloo.
 
 ## Executar Localmente
 

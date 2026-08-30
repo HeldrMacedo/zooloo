@@ -149,7 +149,6 @@ class GeralCaixaJbList extends TPage
             foreach ($rows as $row) {
                 $this->datagrid->addItem($row);
             }
-            $this->datagrid->updatePage();
 
             if (empty($rows)) {
                 new TMessage('info', 'Não existe resultado para esta data!');

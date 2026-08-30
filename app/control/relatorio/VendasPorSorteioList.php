@@ -107,7 +107,6 @@ class VendasPorSorteioList extends TPage
             foreach ($rows as $row) {
                 $this->datagrid->addItem($row);
             }
-            $this->datagrid->updatePage();
         } catch (Exception $e) {
             TTransaction::rollback();
             new TMessage('error', $e->getMessage());

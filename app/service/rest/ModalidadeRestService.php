@@ -5,8 +5,99 @@ use Adianti\Database\TRepository;
 use Adianti\Database\TCriteria;
 use Adianti\Database\TFilter;
 
-class ModalidadeRestService
-{
+class ModalidadeRestService {
+    /**
+     * Lista as modalidades cadastradas filtradas por filtro_banca (1=JB, 2=Quininha, 3=Seninha, 4=Lotinha).
+     */
+    public static function listar($param)
+    {
+        try
+        {
+            $filtro_banca = (int) ($param["data"]["filtro_banca"] ?? $param["filtro_banca"] ?? 1);
+
+            TTransaction::open("permission");
+            $conn = TTransaction::get();
+
+            $sql = "
+                SELECT
+                    m.modalidade_id,
+                    m.apresentacao,
+                    m.ordem,
+                    m.limite_palpite,
+                    m.limite_aceite,
+                    m.limite_descarga,
+                    m.multiplicador,
+                    m.multiplicador_colocacao_01,
+                    m.multiplicador_colocacao_02,
+                    m.multiplicador_colocacao_03,
+                    m.multiplicador_colocacao_04,
+                    m.multiplicador_colocacao_05,
+                    m.ativo,
+                    j.jogo_id,
+                    j.filtro_banca,
+                    j.descricao_grupo,
+                    j.descricao AS jogo_descricao,
+                    TRIM(j.abreviacao) AS abreviacao,
+                    j.tamanho_max,
+                    j.qtd_colocacao_premio,
+                    j.informar_valores_modalidade,
+                    j.orientacao
+                FROM cad_modalidade m
+                JOIN int_jogo j ON j.jogo_id = m.jogo_id
+                WHERE j.filtro_banca = :filtro_banca
+                  AND j.ativo = 'S'
+                ORDER BY m.ordem ASC, m.modalidade_id ASC
+            ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([':filtro_banca' => $filtro_banca]);
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            TTransaction::close();
+
+            $result = [];
+            foreach ($rows as $row)
+            {
+                $result[] = [
+                    'modalidade_id'               => (int) $row['modalidade_id'],
+                    'id'                          => (int) $row['modalidade_id'],
+                    'apresentacao'                => $row['apresentacao'],
+                    'nome'                        => $row['apresentacao'],
+                    'ordem'                       => (int) $row['ordem'],
+                    'multiplicador'               => (float) $row['multiplicador'],
+                    'limite_palpite'              => (float) $row['limite_palpite'],
+                    'limite_aceite'               => (float) $row['limite_aceite'],
+                    'limite_descarga'             => (float) $row['limite_descarga'],
+                    'ativo'                       => $row['ativo'],
+                    'ativa'                       => $row['ativo'] === 'S',
+                    'jogo_id'                     => (int) $row['jogo_id'],
+                    'filtro_banca'                => (int) $row['filtro_banca'],
+                    'descricao_grupo'             => $row['descricao_grupo'],
+                    'jogo_descricao'              => $row['jogo_descricao'],
+                    'sigla'                       => trim($row['abreviacao']),
+                    'abreviacao'                  => trim($row['abreviacao']),
+                    'digitos'                     => (int) $row['tamanho_max'],
+                    'tamanho_max'                 => (int) $row['tamanho_max'],
+                    'qtd_colocacao_premio'        => (int) $row['qtd_colocacao_premio'],
+                    'informar_valores_modalidade' => $row['informar_valores_modalidade'],
+                    'orientacao'                  => $row['orientacao'],
+                    'multiplicador_colocacao_01'  => (float) $row['multiplicador_colocacao_01'],
+                    'multiplicador_colocacao_02'  => (float) $row['multiplicador_colocacao_02'],
+                    'multiplicador_colocacao_03'  => (float) $row['multiplicador_colocacao_03'],
+                    'multiplicador_colocacao_04'  => (float) $row['multiplicador_colocacao_04'],
+                    'multiplicador_colocacao_05'  => (float) $row['multiplicador_colocacao_05'],
+                ];
+            }
+
+            return $result;
+        }
+        catch (Exception $e)
+        {
+            TTransaction::rollback();
+            throw $e;
+        }
+    }
+
     /**
      * Retorna as modalidades disponíveis para um sorteio na área do vendedor.
      * Inclui cotação (cfg_area_cotacao), limite da área (cfg_area_limite) e

@@ -131,7 +131,6 @@ class GradeComissaoItensForm extends TPage
                     $this->datagrid->addItem($item);
                 }
             }
-            $this->datagrid->updatePage();
         } catch (Exception $e) {
             TTransaction::rollback();
         }

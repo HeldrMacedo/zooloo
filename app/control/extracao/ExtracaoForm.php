@@ -4,6 +4,7 @@ use Adianti\Control\TAction;
 use Adianti\Control\TPage;
 use Adianti\Database\TTransaction;
 use Adianti\Validator\TRequiredValidator;
+use Adianti\Validator\TMaxValueValidator;
 use Adianti\Widget\Container\TVBox;
 use Adianti\Widget\Dialog\TMessage;
 use Adianti\Widget\Form\TCheckGroup;
@@ -51,6 +52,7 @@ class ExtracaoForm extends TPage
         $abreviacao->addValidation('descricao_mobile', new TRequiredValidator);
         $horaLimite->addValidation('Hora Limite', new TRequiredValidator);
         $premiacao_maxima->addValidation('Prêmio Máximo', new TRequiredValidator);
+        $premiacao_maxima->addValidation('Prêmio Máximo', new TMaxValueValidator, [10]);
         $dataPrimeiroSorteio->addValidation('Data Primeiro Sorteio', new TRequiredValidator);
     
         $dataPrimeiroSorteio->setMask('dd/mm/yyyy');

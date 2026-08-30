@@ -195,7 +195,6 @@ class ConsultaVendasList extends TPage
                     $total_previsto += (float)$row->previsao_premio;
                 }
             }
-            $this->datagrid->updatePage();
 
             $fmt = fn($v) => 'R$ ' . number_format($v, 2, ',', '.');
             $panel = new TPanelGroup();
