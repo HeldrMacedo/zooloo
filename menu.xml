@@ -96,8 +96,8 @@
                 <icon>fas:search fa-fw</icon>
                 <action>ConsultaVendasList</action>
             </menuitem>
-            <menuitem label="Vendas por Sorteio">
-                <icon>fas:table fa-fw</icon>
+            <menuitem label="Sorteios Abertos">
+                <icon>fas:calendar-alt fa-fw</icon>
                 <action>VendasPorSorteioList</action>
             </menuitem>
             <menuitem label="Premiações">

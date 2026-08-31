@@ -2,15 +2,15 @@
 
 use Adianti\Control\TPage;
 use Adianti\Control\TAction;
+use Adianti\Control\TWindow;
 use Adianti\Database\TTransaction;
-use Adianti\Database\TFilter;
-use Adianti\Database\TCriteria;
 use Adianti\Registry\TSession;
+use Adianti\Widget\Base\TElement;
 use Adianti\Widget\Container\TPanelGroup;
 use Adianti\Widget\Container\TVBox;
 use Adianti\Widget\Datagrid\TDataGrid;
+use Adianti\Widget\Datagrid\TDataGridAction;
 use Adianti\Widget\Datagrid\TDataGridColumn;
-use Adianti\Widget\Datagrid\TPageNavigation;
 use Adianti\Widget\Dialog\TMessage;
 use Adianti\Widget\Form\TCombo;
 use Adianti\Widget\Form\TDate;
@@ -25,7 +25,9 @@ class ConsultaVendasList extends TPage
 {
     protected $form;
     protected $datagrid;
-    protected $pageNavigation;
+    protected $panel;
+    protected $footerTotal;
+    protected $loaded;
 
     public function __construct()
     {
@@ -44,13 +46,15 @@ class ConsultaVendasList extends TPage
 
         $data_ini->setMask('dd/mm/yyyy'); $data_ini->setDatabaseMask('yyyy-mm-dd');
         $data_fim->setMask('dd/mm/yyyy'); $data_fim->setDatabaseMask('yyyy-mm-dd');
-        $data_ini->setValue(date('d/m/Y'));
-        $data_fim->setValue(date('d/m/Y'));
+        $data_ini->setValue(date('Y-m-d'));
+        $data_fim->setValue(date('Y-m-d'));
 
         $situacao->addItems(['' => 'TODOS', 'ATIVO' => 'ATIVO', 'CANCELADO' => 'CANCELADO']);
+        $situacao->setDefaultOption(false);
+        $situacao->setSize('100%');
         $situacao->setValue('');
 
-        foreach ([$area_id, $extracao_id, $vendedor_id, $situacao] as $f) {
+        foreach ([$area_id, $extracao_id, $vendedor_id] as $f) {
             $f->setSize('100%');
             $f->setDefaultOption(true);
         }
@@ -64,7 +68,9 @@ class ConsultaVendasList extends TPage
         $this->form->addAction('Buscar', new TAction([$this, 'onSearch']), 'fa:search blue');
         $this->form->addAction('Limpar', new TAction([$this, 'onClear']), 'fa:eraser red');
 
-        $this->form->setData(TSession::getValue(__CLASS__.'_filter_data'));
+        if ($filter_data = TSession::getValue(__CLASS__.'_filter_data')) {
+            $this->form->setData($filter_data);
+        }
 
         $this->datagrid = new BootstrapDatagridWrapper(new TDataGrid);
         $this->datagrid->style = 'width: 100%';
@@ -86,7 +92,10 @@ class ConsultaVendasList extends TPage
 
         $col_data->setTransformer(fn($v) => $v ? date('d/m/Y H:i:s', strtotime($v)) : '');
 
-        $col_nsu->setTransformer(fn($v) => str_pad($v, 6, '0', STR_PAD_LEFT));
+        $col_nsu->setTransformer(function($v, $object) {
+            $nsu_str = str_pad($v, 6, '0', STR_PAD_LEFT);
+            return "<a generator='adianti' href='index.php?class=ConsultaVendasList&method=onView&nsu={$v}' class='text-primary font-weight-bold' style='text-decoration:underline; cursor:pointer;'>{$nsu_str}</a>";
+        });
 
         $col_situacao->setTransformer(function($v) {
             return $v === 'CANCELADO'
@@ -98,16 +107,22 @@ class ConsultaVendasList extends TPage
             $this->datagrid->addColumn($c);
         }
 
+        $action_view = new TDataGridAction([$this, 'onView']);
+        $action_view->setButtonClass('btn btn-default btn-sm');
+        $action_view->setLabel('Detalhes');
+        $action_view->setImage('fa:eye blue');
+        $action_view->setField('nsu');
+        $this->datagrid->addAction($action_view);
+
         $this->datagrid->createModel();
 
-        $this->pageNavigation = new TPageNavigation;
-        $this->pageNavigation->enableCounters();
-        $this->pageNavigation->setAction(new TAction([$this, 'onReload']));
-        $this->pageNavigation->setWidth($this->datagrid->getWidth());
+        $this->footerTotal = new TElement('div');
+        $this->footerTotal->style = 'text-align:right;padding:8px;font-weight:bold;';
 
         $panel = new TPanelGroup();
         $panel->add($this->datagrid)->style = 'overflow-x:auto';
-        $panel->addFooter($this->pageNavigation);
+        $panel->addFooter($this->footerTotal);
+        $this->panel = $panel;
 
         $container = new TVBox;
         $container->style = 'width: 100%';
@@ -122,6 +137,7 @@ class ConsultaVendasList extends TPage
         $data = $this->form->getData();
         TSession::setValue(__CLASS__.'_filter_data', $data);
         TSession::setValue(__CLASS__.'_filter', (array) $data);
+        $this->form->setData($data);
         $this->onReload($param);
     }
 
@@ -131,6 +147,14 @@ class ConsultaVendasList extends TPage
         TSession::setValue(__CLASS__.'_filter', null);
         $this->form->clear();
         $this->datagrid->clear();
+        $this->footerTotal->clearChildren();
+
+        $data = (object) [
+            'data_ini' => date('Y-m-d'),
+            'data_fim' => date('Y-m-d'),
+            'situacao' => ''
+        ];
+        $this->form->setData($data);
     }
 
     public function onReload($param = [])
@@ -171,8 +195,8 @@ class ConsultaVendasList extends TPage
                     $params[':vendedor_id'] = $filter['vendedor_id'];
                 }
                 if (!empty($filter['situacao'])) {
-                    $where[] = 'situacao = :situacao';
-                    $params[':situacao'] = $filter['situacao'];
+                    $where[] = 'situacao ILIKE :situacao';
+                    $params[':situacao'] = '%' . $filter['situacao'] . '%';
                 }
             }
 
@@ -197,14 +221,147 @@ class ConsultaVendasList extends TPage
             }
 
             $fmt = fn($v) => 'R$ ' . number_format($v, 2, ',', '.');
-            $panel = new TPanelGroup();
-            $panel->add($this->datagrid)->style = 'overflow-x:auto';
-            $panel->addFooter($this->pageNavigation);
-            $panel->addFooter("<div style='text-align:right;padding:8px'><strong>Comissão: {$fmt($total_comissao)} | Total: {$fmt($total_venda)} | Prev. Prêmio: {$fmt($total_previsto)}</strong></div>");
+            $this->footerTotal->clearChildren();
+            $this->footerTotal->add("Comissão: {$fmt($total_comissao)} | Total: {$fmt($total_venda)} | Prev. Prêmio: {$fmt($total_previsto)}");
 
+            $this->loaded = true;
         } catch (Exception $e) {
             TTransaction::rollback();
             new TMessage('error', $e->getMessage());
         }
+    }
+
+    public function onView($param)
+    {
+        try {
+            if (empty($param['nsu'])) {
+                throw new Exception('NSU não informado.');
+            }
+
+            TTransaction::open('permission');
+            $conn = TTransaction::get();
+
+            $sql = 'SELECT * FROM vw_vendajb WHERE nsu = :nsu LIMIT 1';
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([':nsu' => (int) $param['nsu']]);
+            $venda = $stmt->fetch(\PDO::FETCH_OBJ);
+            TTransaction::close();
+
+            if (!$venda) {
+                throw new Exception('Venda não encontrada para o NSU informado.');
+            }
+
+            // Status de pagamento conforme regra original
+            if ($venda->sorteado === 'S') {
+                $sorteado_valor      = (float) ($venda->sorteado_valor ?? 0);
+                $sorteado_valor_pago = (float) ($venda->sorteado_valor_pago ?? 0);
+
+                if ($sorteado_valor_pago <= 0) {
+                    $pago_html = "<span class='badge bg-warning text-dark'>Não foi pago!</span>";
+                } elseif ($sorteado_valor > 0 && $sorteado_valor == $sorteado_valor_pago) {
+                    $pago_html = "<span class='badge bg-success'>Pago totalmente!</span>";
+                } elseif ($sorteado_valor_pago > 0 && $sorteado_valor > $sorteado_valor_pago) {
+                    $pago_html = "<span class='badge bg-info text-white'>Pago parcialmente!</span>";
+                } else {
+                    $pago_html = "<span class='badge bg-success'>Pago!</span>";
+                }
+            } else {
+                $pago_html = "<span class='text-muted'>Venda sem premiação!</span>";
+            }
+
+            $sorteado_badge = ($venda->sorteado === 'S')
+                ? "<span class='badge bg-success'>SIM</span>"
+                : "<span class='badge bg-secondary'>NÃO</span>";
+
+            $situacao_badge = ($venda->situacao === 'CANCELADO')
+                ? "<span class='badge bg-danger'>CANCELADO</span>"
+                : "<span class='badge bg-success'>ATIVO</span>";
+
+            $nsu_formatado = str_pad($venda->nsu, 6, '0', STR_PAD_LEFT);
+            $data_hora     = $venda->data_hora ? date('d/m/Y H:i:s', strtotime($venda->data_hora)) : '—';
+            $poule         = $venda->poule ?? $venda->pouple ?? '—';
+            $palpites      = !empty($venda->palpites) ? str_replace(',', ' ', $venda->palpites) : (!empty($venda->palpite) ? str_replace(',', ' ', $venda->palpite) : '—');
+            $total_fmt     = 'R$ ' . number_format((float)$venda->total_sorteio, 2, ',', '.');
+            $comissao_fmt  = 'R$ ' . number_format((float)($venda->comissao_sorteio ?? 0), 2, ',', '.');
+            $premio_fmt    = 'R$ ' . number_format((float)($venda->sorteado_valor ?? 0), 2, ',', '.');
+            $previsto_fmt  = 'R$ ' . number_format((float)($venda->previsao_premio ?? 0), 2, ',', '.');
+            $coloc_ini     = $venda->colocao_inicial ?? $venda->colocacao_inicial ?? '1';
+            $coloc_fim     = $venda->colocao_final ?? $venda->colocacao_final ?? '1';
+
+            $reimpressao_info = ($venda->reimpressao ?? 0);
+            if (!empty($venda->data_reimpressao)) {
+                $reimpressao_info .= ' - ' . date('d/m/Y H:i', strtotime($venda->data_reimpressao));
+            } else {
+                $reimpressao_info .= ' - Sem Reimpressão';
+            }
+
+            $content = new TElement('div');
+            $content->style = 'padding: 15px; font-size: 14px;';
+            $content->add("
+                <div class='card mb-2'>
+                    <div class='card-header bg-primary text-white d-flex justify-content-between align-items-center' style='padding: 10px 15px;'>
+                        <strong><i class='fa fa-receipt'></i> Detalhes da Venda - NSU {$nsu_formatado}</strong>
+                        <span>{$situacao_badge}</span>
+                    </div>
+                    <div class='card-body' style='line-height: 1.8; padding: 15px;'>
+                        <div class='row'>
+                            <div class='col-md-6'>
+                                <strong>Cliente:</strong> " . ($venda->cliente ?: '—') . "<br>
+                                <strong>Fone:</strong> " . ($venda->fone ?: '—') . "<br>
+                                <strong>Data:</strong> {$data_hora}<br>
+                                <strong>Bilhete/Poule:</strong> {$poule}<br>
+                                <strong>Extração:</strong> {$venda->extracao}<br>
+                                <strong>Vendedor:</strong> {$venda->vendedor}
+                            </div>
+                            <div class='col-md-6'>
+                                <strong>Modalidade:</strong> " . ($venda->apresentacao ?? $venda->modalidade) . "<br>
+                                <strong>Sorteado:</strong> {$sorteado_badge}<br>
+                                <strong>Pagamento:</strong> {$pago_html}<br>
+                                <strong>Palpites (Qtde):</strong> " . ($venda->qtde_palpites ?? 1) . "<br>
+                                <strong>Prêmios:</strong> {$coloc_ini}ºP ao {$coloc_fim}ºP<br>
+                                <strong>Valor a pagar:</strong> <span class='text-primary font-weight-bold'>{$total_fmt}</span>
+                            </div>
+                        </div>
+
+                        <hr style='margin: 12px 0;'>
+
+                        <div>
+                            <strong>Palpites:</strong>
+                            <div style='color: #000000; background:#f8f9fa;padding:10px;border-radius:4px;font-family:monospace;font-size:15px;word-break:break-all;margin-top:5px;border:1px solid #e9ecef;'>
+                                {$palpites}
+                            </div>
+                        </div>
+
+                        <hr style='margin: 12px 0;'>
+
+                        <div class='row text-muted' style='font-size: 12px;'>
+                            <div class='col-md-6'>
+                                <strong>NSU:</strong> {$venda->nsu}<br>
+                                <strong>MD5:</strong> " . ($venda->md5 ?: '—') . "
+                            </div>
+                            <div class='col-md-6'>
+                                <strong>Comissão:</strong> {$comissao_fmt} | <strong>Prev. Prêmio:</strong> {$previsto_fmt}<br>
+                                <strong>Reimpressão:</strong> {$reimpressao_info}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ");
+
+            $window = TWindow::create('Detalhes da Venda', 680, null);
+            $window->add($content);
+            $window->show();
+
+        } catch (Exception $e) {
+            new TMessage('error', $e->getMessage());
+        }
+    }
+
+    public function show()
+    {
+        if (!$this->loaded && (!isset($_GET['method']) || !in_array($_GET['method'], ['onReload', 'onSearch', 'onClear']))) {
+            $this->onReload();
+        }
+        parent::show();
     }
 }

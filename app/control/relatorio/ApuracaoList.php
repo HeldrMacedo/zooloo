@@ -4,6 +4,7 @@ use Adianti\Control\TPage;
 use Adianti\Control\TAction;
 use Adianti\Database\TTransaction;
 use Adianti\Registry\TSession;
+use Adianti\Widget\Base\TElement;
 use Adianti\Widget\Container\TPanelGroup;
 use Adianti\Widget\Container\TVBox;
 use Adianti\Widget\Datagrid\TDataGrid;
@@ -20,69 +21,72 @@ class ApuracaoList extends TPage
 {
     protected $form;
     protected $datagrid;
+    protected $panel;
+    protected $footerTotal;
+    protected $loaded;
 
     public function __construct()
     {
         parent::__construct();
 
         $this->form = new BootstrapFormBuilder('form_apuracao');
-        $this->form->setFormTitle('Apuração por Sorteio');
+        $this->form->setFormTitle('Apuração');
 
-        $data_ini    = new TDate('data_ini');
-        $data_fim    = new TDate('data_fim');
+        $data        = new TDate('data');
         $area_id     = new TDBCombo('area_id', 'permission', 'Area', 'area_id', 'descricao');
         $extracao_id = new TDBCombo('extracao_id', 'permission', 'Extracao', 'extracao_id', 'descricao');
 
-        $data_ini->setMask('dd/mm/yyyy'); $data_ini->setDatabaseMask('yyyy-mm-dd');
-        $data_fim->setMask('dd/mm/yyyy'); $data_fim->setDatabaseMask('yyyy-mm-dd');
-        $data_ini->setValue(date('d/m/Y'));
-        $data_fim->setValue(date('d/m/Y'));
+        $data->setMask('dd/mm/yyyy');
+        $data->setDatabaseMask('yyyy-mm-dd');
+        $data->setValue(date('Y-m-d'));
 
         foreach ([$area_id, $extracao_id] as $f) {
-            $f->setSize('100%'); $f->setDefaultOption(true);
+            $f->setSize('100%');
+            $f->setDefaultOption(true);
         }
 
-        $this->form->addFields([new TLabel('Data Ini:')], [$data_ini], [new TLabel('Data Fim:')], [$data_fim]);
-        $this->form->addFields([new TLabel('Área:')], [$area_id], [new TLabel('Extração:')], [$extracao_id]);
+        $this->form->addFields([new TLabel('Data:')], [$data]);
+        $this->form->addFields([new TLabel('Área:')], [$area_id]);
+        $this->form->addFields([new TLabel('Extração:')], [$extracao_id]);
 
         $this->form->addAction('Buscar', new TAction([$this, 'onSearch']), 'fa:search blue');
         $this->form->addAction('Limpar', new TAction([$this, 'onClear']), 'fa:eraser red');
 
-        $this->form->setData(TSession::getValue(__CLASS__.'_filter_data'));
+        if ($filter_data = TSession::getValue(__CLASS__.'_filter_data')) {
+            $this->form->setData($filter_data);
+        }
 
         $this->datagrid = new BootstrapDatagridWrapper(new TDataGrid);
         $this->datagrid->style = 'width: 100%';
 
-        $col_numero   = new TDataGridColumn('sorteio_numero', 'Nº', 'center', '7%');
-        $col_data     = new TDataGridColumn('data_sorteio', 'Data', 'center', '9%');
+        $col_nsu      = new TDataGridColumn('nsu', 'NSU', 'center', '10%');
+        $col_poule    = new TDataGridColumn('poule', 'Poule', 'center', '10%');
+        $col_vendedor = new TDataGridColumn('vendedor', 'Vendedor', 'left', '18%');
+        $col_data     = new TDataGridColumn('data_hora', 'Data', 'center', '14%');
         $col_extracao = new TDataGridColumn('extracao', 'Extração', 'left', '16%');
-        $col_numeros  = new TDataGridColumn('numeros_sorteados', 'Números Sorteados', 'center', '16%');
-        $col_situacao = new TDataGridColumn('situacao', 'Status', 'center', '8%');
-        $col_total    = new TDataGridColumn('total_apostado', 'Total Apost.', 'right', '11%');
-        $col_comissao = new TDataGridColumn('comissao', 'Comissão', 'right', '11%');
-        $col_liquido  = new TDataGridColumn('liquido', 'Líquido', 'right', '11%');
-        $col_premio   = new TDataGridColumn('total_premio', 'Total Prêmio', 'right', '11%');
+        $col_palpites = new TDataGridColumn('palpites', 'Palpite', 'left', '20%');
+        $col_valor    = new TDataGridColumn('total_sorteio', 'Valor', 'right', '12%');
+
+        $col_nsu->setTransformer(fn($v) => str_pad($v, 6, '0', STR_PAD_LEFT));
+        $col_poule->setTransformer(fn($v) => str_pad($v, 6, '0', STR_PAD_LEFT));
+        $col_data->setTransformer(fn($v) => $v ? date('d/m/Y H:i:s', strtotime($v)) : '');
+        $col_palpites->setTransformer(fn($v) => $v ? str_replace(',', ' ', $v) : '');
 
         $fmt_brl = fn($v) => 'R$ ' . number_format((float)$v, 2, ',', '.');
-        foreach ([$col_total,$col_comissao,$col_liquido,$col_premio] as $c) {
-            $c->setTransformer($fmt_brl);
-        }
-        $col_data->setTransformer(fn($v) => $v ? date('d/m/Y', strtotime($v)) : '');
-        $col_numero->setTransformer(fn($v) => str_pad($v, 6, '0', STR_PAD_LEFT));
-        $col_situacao->setTransformer(function($v) {
-            return $v === 'F'
-                ? "<span class='label label-default'>Encerrado</span>"
-                : "<span class='label label-success'>Aberto</span>";
-        });
-        $col_numeros->setTransformer(fn($v) => $v ?: '<em class="text-muted">—</em>');
+        $col_valor->setTransformer($fmt_brl);
 
-        foreach ([$col_numero,$col_data,$col_extracao,$col_numeros,$col_situacao,$col_total,$col_comissao,$col_liquido,$col_premio] as $c) {
+        foreach ([$col_nsu, $col_poule, $col_vendedor, $col_data, $col_extracao, $col_palpites, $col_valor] as $c) {
             $this->datagrid->addColumn($c);
         }
         $this->datagrid->createModel();
 
+        $this->footerTotal = new TElement('div');
+        $this->footerTotal->style = 'text-align:right;padding:8px;font-weight:bold;';
+
         $panel = new TPanelGroup();
         $panel->add($this->datagrid)->style = 'overflow-x:auto';
+        $panel->addFooter($this->footerTotal);
+        $this->panel = $panel;
 
         $container = new TVBox;
         $container->style = 'width: 100%';
@@ -97,6 +101,7 @@ class ApuracaoList extends TPage
         $data = $this->form->getData();
         TSession::setValue(__CLASS__.'_filter_data', $data);
         TSession::setValue(__CLASS__.'_filter', (array) $data);
+        $this->form->setData($data);
         $this->onReload($param);
     }
 
@@ -106,58 +111,64 @@ class ApuracaoList extends TPage
         TSession::setValue(__CLASS__.'_filter', null);
         $this->form->clear();
         $this->datagrid->clear();
+        $this->footerTotal->clearChildren();
+
+        $data = (object) [
+            'data'        => date('Y-m-d'),
+            'area_id'     => '',
+            'extracao_id' => ''
+        ];
+        $this->form->setData($data);
     }
 
     public function onReload($param = [])
     {
         $filter = TSession::getValue(__CLASS__.'_filter');
-        if (empty($filter)) return;
+        if (empty($filter)) {
+            $filter = ['data' => date('Y-m-d')];
+        }
 
         try {
             TTransaction::open('permission');
             $conn = TTransaction::get();
 
-            $whereMs  = [];
-            $whereJb  = ["js.cancelado = 'N'"];
-            $params   = [];
+            $data_val    = !empty($filter['data']) ? $filter['data'] : date('Y-m-d');
+            $data_inicio = $data_val . ' 00:00:00';
+            $data_fim    = date('Y-m-d 00:00:00', strtotime($data_val . ' +1 day'));
 
-            if (!empty($filter['data_ini'])) {
-                $whereMs[] = 'ms.data_sorteio >= :data_ini';
-                $params[':data_ini'] = $filter['data_ini'];
-            }
-            if (!empty($filter['data_fim'])) {
-                $whereMs[] = 'ms.data_sorteio <= :data_fim';
-                $params[':data_fim'] = $filter['data_fim'];
-            }
-            if (!empty($filter['extracao_id'])) {
-                $whereMs[] = 'ms.extracao_id = :extracao_id';
-                $params[':extracao_id'] = $filter['extracao_id'];
-            }
+            $where = ['mv.data_hora >= :data_inicio', 'mv.data_hora < :data_fim', "mv.cancelado = 'N'"];
+            $params = [
+                ':data_inicio' => $data_inicio,
+                ':data_fim'    => $data_fim,
+            ];
+
             if (!empty($filter['area_id'])) {
-                $whereJb[] = 'js.area_id = :area_id';
-                $params[':area_id'] = $filter['area_id'];
+                $where[] = 'a.area_id = :area_id';
+                $params[':area_id'] = (int) $filter['area_id'];
             }
 
-            $condMs = $whereMs ? 'WHERE ' . implode(' AND ', $whereMs) : '';
-            $condJb = implode(' AND ', $whereJb);
+            if (!empty($filter['extracao_id'])) {
+                $where[] = 'cde.extracao_id = :extracao_id';
+                $params[':extracao_id'] = (int) $filter['extracao_id'];
+            }
 
             $sql = "
                 SELECT
-                    ms.sorteio_numero,
-                    ms.data_sorteio,
-                    e.descricao AS extracao,
-                    ms.numeros_sorteados,
-                    ms.situacao,
-                    COALESCE(SUM(js.total_sorteio), 0) AS total_apostado,
-                    COALESCE(SUM(js.comissao_sorteio), 0) AS comissao,
-                    COALESCE(SUM(js.total_sorteio - js.comissao_sorteio), 0) AS liquido,
-                    COALESCE(SUM(js.sorteado_valor), 0) AS total_premio
-                FROM mov_sorteio ms
-                JOIN cad_extracao e ON e.extracao_id = ms.extracao_id
-                LEFT JOIN vw_vendajb js ON js.sorteio_id = ms.sorteio_id AND {$condJb}
-                {$condMs}
-                GROUP BY ms.sorteio_id, ms.sorteio_numero, ms.data_sorteio, e.descricao, ms.numeros_sorteados, ms.situacao
-                ORDER BY ms.data_sorteio DESC, e.descricao
+                    mv.jb_id AS nsu,
+                    mv.bilhete_numero AS poule,
+                    v.nome AS vendedor,
+                    cde.descricao AS extracao,
+                    mv.data_hora,
+                    mvs.palpites,
+                    mvs.total_sorteio
+                FROM mov_jb mv
+                INNER JOIN mov_jb_sorteio mvs ON mv.jb_id = mvs.jb_id
+                INNER JOIN cad_area a ON mv.area_id = a.area_id
+                INNER JOIN cad_vendedor v ON mv.vendedor_id = v.vendedor_id
+                INNER JOIN mov_sorteio movs ON mvs.sorteio_id = movs.sorteio_id
+                INNER JOIN cad_extracao cde ON movs.extracao_id = cde.extracao_id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY mv.data_hora DESC, mv.jb_id DESC
             ";
 
             $stmt = $conn->prepare($sql);
@@ -166,16 +177,35 @@ class ApuracaoList extends TPage
             TTransaction::close();
 
             $this->datagrid->clear();
+            $total = 0;
+
             foreach ($rows as $row) {
                 $this->datagrid->addItem($row);
+                $total += (float)$row->total_sorteio;
             }
+
+            $fmt = fn($v) => 'R$ ' . number_format($v, 2, ',', '.');
+            $this->footerTotal->clearChildren();
+            $this->footerTotal->add("Total: {$fmt($total)}");
+
+            $this->loaded = true;
 
             if (empty($rows)) {
                 new TMessage('info', 'Não existe resultado para esta data!');
             }
+
         } catch (Exception $e) {
             TTransaction::rollback();
             new TMessage('error', $e->getMessage());
         }
     }
+
+    public function show()
+    {
+        if (!$this->loaded && (!isset($_GET['method']) || !in_array($_GET['method'], ['onReload', 'onSearch', 'onClear']))) {
+            $this->onReload();
+        }
+        parent::show();
+    }
 }
+

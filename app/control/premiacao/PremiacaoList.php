@@ -4,12 +4,12 @@ use Adianti\Control\TPage;
 use Adianti\Control\TAction;
 use Adianti\Database\TTransaction;
 use Adianti\Registry\TSession;
+use Adianti\Widget\Base\TElement;
 use Adianti\Widget\Container\TPanelGroup;
 use Adianti\Widget\Container\TVBox;
 use Adianti\Widget\Datagrid\TDataGrid;
 use Adianti\Widget\Datagrid\TDataGridAction;
 use Adianti\Widget\Datagrid\TDataGridColumn;
-use Adianti\Widget\Datagrid\TPageNavigation;
 use Adianti\Widget\Dialog\TMessage;
 use Adianti\Widget\Dialog\TQuestion;
 use Adianti\Widget\Form\TCombo;
@@ -29,8 +29,9 @@ class PremiacaoList extends TPage
 
     protected $form;
     protected $datagrid;
-    protected $pageNavigation;
     protected $panel;
+    protected $footerTotal;
+    protected $loaded;
 
     public function __construct()
     {
@@ -49,13 +50,15 @@ class PremiacaoList extends TPage
 
         $data_ini->setMask('dd/mm/yyyy'); $data_ini->setDatabaseMask('yyyy-mm-dd');
         $data_fim->setMask('dd/mm/yyyy'); $data_fim->setDatabaseMask('yyyy-mm-dd');
-        $data_ini->setValue(date('d/m/Y'));
-        $data_fim->setValue(date('d/m/Y'));
+        $data_ini->setValue(date('Y-m-d'));
+        $data_fim->setValue(date('Y-m-d'));
 
         $pago->addItems(['' => 'TODOS', 'N' => 'Não Pagos', 'S' => 'Pagos']);
+        $pago->setDefaultOption(false);
+        $pago->setSize('100%');
         $pago->setValue('N');
 
-        foreach ([$area_id, $extracao_id, $vendedor_id, $pago] as $f) {
+        foreach ([$area_id, $extracao_id, $vendedor_id] as $f) {
             $f->setSize('100%');
             $f->setDefaultOption(true);
         }
@@ -69,7 +72,9 @@ class PremiacaoList extends TPage
         $this->form->addAction('Buscar', new TAction([$this, 'onSearch']), 'fa:search blue');
         $this->form->addAction('Limpar', new TAction([$this, 'onClear']), 'fa:eraser red');
 
-        $this->form->setData(TSession::getValue(__CLASS__.'_filter_data'));
+        if ($filter_data = TSession::getValue(__CLASS__.'_filter_data')) {
+            $this->form->setData($filter_data);
+        }
 
         $this->datagrid = new BootstrapDatagridWrapper(new TDataGrid);
         $this->datagrid->style = 'width: 100%';
@@ -92,8 +97,8 @@ class PremiacaoList extends TPage
         $col_nsu->setTransformer(fn($v) => str_pad($v, 6, '0', STR_PAD_LEFT));
         $col_pago->setTransformer(function($v) {
             return $v === 'S'
-                ? "<span class='label label-success'>Sim</span>"
-                : "<span class='label label-warning'>Não</span>";
+                ? "<span class='badge bg-success'>Sim</span>"
+                : "<span class='badge bg-warning text-dark'>Não</span>";
         });
 
         foreach ([$col_extracao,$col_data,$col_vendedor,$col_nsu,$col_palpites,$col_modalidade,$col_apostado,$col_premio,$col_colocacao,$col_pago] as $c) {
@@ -109,14 +114,12 @@ class PremiacaoList extends TPage
 
         $this->datagrid->createModel();
 
-        $this->pageNavigation = new TPageNavigation;
-        $this->pageNavigation->enableCounters();
-        $this->pageNavigation->setAction(new TAction([$this, 'onReload']));
-        $this->pageNavigation->setWidth($this->datagrid->getWidth());
+        $this->footerTotal = new TElement('div');
+        $this->footerTotal->style = 'text-align:right;padding:8px;font-weight:bold;';
 
         $panel = new TPanelGroup();
         $panel->add($this->datagrid)->style = 'overflow-x:auto';
-        $panel->addFooter($this->pageNavigation);
+        $panel->addFooter($this->footerTotal);
         $this->panel = $panel;
 
         $container = new TVBox;
@@ -132,6 +135,7 @@ class PremiacaoList extends TPage
         $data = $this->form->getData();
         TSession::setValue(__CLASS__.'_filter_data', $data);
         TSession::setValue(__CLASS__.'_filter', (array) $data);
+        $this->form->setData($data);
         $this->onReload($param);
     }
 
@@ -141,6 +145,14 @@ class PremiacaoList extends TPage
         TSession::setValue(__CLASS__.'_filter', null);
         $this->form->clear();
         $this->datagrid->clear();
+        $this->footerTotal->clearChildren();
+
+        $data = (object) [
+            'data_ini' => date('Y-m-d'),
+            'data_fim' => date('Y-m-d'),
+            'pago'     => 'N'
+        ];
+        $this->form->setData($data);
     }
 
     public function onReload($param = [])
@@ -207,11 +219,10 @@ class PremiacaoList extends TPage
             }
 
             $fmt = fn($v) => 'R$ ' . number_format($v, 2, ',', '.');
-            $this->panel->addFooter(
-                "<div style='text-align:right;padding:8px'><strong>"
-                . "Total Apostado: {$fmt($total_apostado)} | Total Prêmio: {$fmt($total_premio)}"
-                . '</strong></div>'
-            );
+            $this->footerTotal->clearChildren();
+            $this->footerTotal->add("Total Apostado: {$fmt($total_apostado)} | Total Prêmio: {$fmt($total_premio)}");
+
+            $this->loaded = true;
         } catch (Exception $e) {
             TTransaction::rollback();
             new TMessage('error', $e->getMessage());
@@ -235,9 +246,38 @@ class PremiacaoList extends TPage
 
     public function onPagar($param)
     {
-        $action = new TAction([$this, 'onConfirmPagar']);
-        $action->setParameter('jb_sorteio_id', $param['jb_sorteio_id']);
-        new TQuestion('Deseja pagar esta premiação?', $action);
+        try {
+            $jb_sorteio_id = (int) ($param['jb_sorteio_id'] ?? 0);
+            if (empty($jb_sorteio_id)) {
+                throw new Exception('Registro não informado.');
+            }
+
+            TTransaction::open('permission');
+            $item = new MovJbSorteio($jb_sorteio_id);
+            TTransaction::close();
+
+            if (!$item || empty($item->jb_sorteio_id)) {
+                throw new Exception('Premiação não encontrada.');
+            }
+
+            if ($item->sorteado_pago === 'S') {
+                new TMessage('info', 'Este bilhete já foi pago!');
+                return;
+            }
+
+            if ((float) $item->sorteado_valor <= 0) {
+                new TMessage('warning', 'Não há prêmio para este jogo.');
+                return;
+            }
+
+            $action = new TAction([$this, 'onConfirmPagar']);
+            $action->setParameter('jb_sorteio_id', $jb_sorteio_id);
+            new TQuestion('Deseja pagar esta premiação?', $action);
+
+        } catch (Exception $e) {
+            TTransaction::rollback();
+            new TMessage('error', $e->getMessage());
+        }
     }
 
     public function onConfirmPagar($param)
@@ -247,7 +287,7 @@ class PremiacaoList extends TPage
             $item = new MovJbSorteio($param['jb_sorteio_id']);
 
             if ($item->sorteado_pago === 'S') {
-                throw new Exception('O prêmio já foi pago.');
+                throw new Exception('Este bilhete já foi pago!');
             }
             if ((float)$item->sorteado_valor <= 0) {
                 throw new Exception('Não há prêmio para este jogo.');
@@ -264,5 +304,13 @@ class PremiacaoList extends TPage
             TTransaction::rollback();
             new TMessage('error', $e->getMessage());
         }
+    }
+
+    public function show()
+    {
+        if (!$this->loaded && (!isset($_GET['method']) || !in_array($_GET['method'], ['onReload', 'onSearch', 'onClear']))) {
+            $this->onReload();
+        }
+        parent::show();
     }
 }

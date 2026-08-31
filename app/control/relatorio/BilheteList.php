@@ -4,14 +4,13 @@ use Adianti\Control\TPage;
 use Adianti\Control\TAction;
 use Adianti\Database\TTransaction;
 use Adianti\Registry\TSession;
+use Adianti\Widget\Base\TElement;
 use Adianti\Widget\Container\TPanelGroup;
 use Adianti\Widget\Container\TVBox;
 use Adianti\Widget\Datagrid\TDataGrid;
 use Adianti\Widget\Datagrid\TDataGridColumn;
 use Adianti\Widget\Dialog\TMessage;
-use Adianti\Widget\Form\TCombo;
 use Adianti\Widget\Form\TDate;
-use Adianti\Widget\Form\TEntry;
 use Adianti\Widget\Form\TLabel;
 use Adianti\Widget\Util\TXMLBreadCrumb;
 use Adianti\Widget\Wrapper\TDBCombo;
@@ -22,6 +21,9 @@ class BilheteList extends TPage
 {
     protected $form;
     protected $datagrid;
+    protected $panel;
+    protected $footerTotal;
+    protected $loaded;
 
     public function __construct()
     {
@@ -31,70 +33,68 @@ class BilheteList extends TPage
         $this->form->setFormTitle('Listagem de Bilhetes Gerados');
 
         $data_ini    = new TDate('data_ini');
-        $data_fim    = new TDate('data_fim');
         $area_id     = new TDBCombo('area_id', 'permission', 'Area', 'area_id', 'descricao');
         $extracao_id = new TDBCombo('extracao_id', 'permission', 'Extracao', 'extracao_id', 'descricao');
-        $vendedor_id = new TDBCombo('vendedor_id', 'permission', 'Vendedor', 'vendedor_id', 'nome');
-        $cancelado   = new TCombo('cancelado');
-        $nsu         = new TEntry('nsu');
 
-        $data_ini->setMask('dd/mm/yyyy'); $data_ini->setDatabaseMask('yyyy-mm-dd');
-        $data_fim->setMask('dd/mm/yyyy'); $data_fim->setDatabaseMask('yyyy-mm-dd');
-        $data_ini->setValue(date('d/m/Y'));
-        $data_fim->setValue(date('d/m/Y'));
+        $data_ini->setMask('dd/mm/yyyy');
+        $data_ini->setDatabaseMask('yyyy-mm-dd');
+        $data_ini->setValue(date('Y-m-d'));
 
-        $cancelado->addItems(['' => 'TODOS', 'N' => 'Ativos', 'S' => 'Cancelados']);
-        $cancelado->setValue('N');
-
-        foreach ([$area_id, $extracao_id, $vendedor_id, $cancelado] as $f) {
-            $f->setSize('100%'); $f->setDefaultOption(true);
+        foreach ([$area_id, $extracao_id] as $f) {
+            $f->setSize('100%');
+            $f->setDefaultOption(true);
         }
-        $nsu->placeholder = 'Busca exclusiva por NSU';
 
-        $this->form->addFields([new TLabel('Data Ini:')], [$data_ini], [new TLabel('Data Fim:')], [$data_fim]);
-        $this->form->addFields([new TLabel('Área:')], [$area_id], [new TLabel('Extração:')], [$extracao_id]);
-        $this->form->addFields([new TLabel('Vendedor:')], [$vendedor_id], [new TLabel('Status:')], [$cancelado]);
-        $this->form->addFields([new TLabel('NSU (exclusivo):')], [$nsu]);
+        $this->form->addFields(
+            [new TLabel('Data Inicial:')], [$data_ini],
+            [new TLabel('Área:')], [$area_id],
+            [new TLabel('Extração:')], [$extracao_id]
+        );
 
         $this->form->addAction('Buscar', new TAction([$this, 'onSearch']), 'fa:search blue');
         $this->form->addAction('Limpar', new TAction([$this, 'onClear']), 'fa:eraser red');
 
-        $this->form->setData(TSession::getValue(__CLASS__.'_filter_data'));
+        if ($filter_data = TSession::getValue(__CLASS__.'_filter_data')) {
+            $this->form->setData($filter_data);
+        }
 
         $this->datagrid = new BootstrapDatagridWrapper(new TDataGrid);
         $this->datagrid->style = 'width: 100%';
 
-        $col_nsu      = new TDataGridColumn('nsu', 'NSU', 'center', '7%');
-        $col_data     = new TDataGridColumn('data_hora', 'Data/Hora', 'center', '12%');
-        $col_vendedor = new TDataGridColumn('vendedor', 'Vendedor', 'left', '14%');
-        $col_extracao = new TDataGridColumn('extracao', 'Extração', 'left', '13%');
-        $col_palpites = new TDataGridColumn('palpites', 'Palpites', 'left', '12%');
-        $col_modal    = new TDataGridColumn('apresentacao', 'Modalidade', 'left', '11%');
-        $col_total    = new TDataGridColumn('total_sorteio', 'Total', 'right', '9%');
-        $col_situacao = new TDataGridColumn('situacao', 'Situação', 'center', '8%');
-        $col_cancel   = new TDataGridColumn('cancelado', 'Cancelado', 'center', '8%');
+        $col_extracao   = new TDataGridColumn('extracao', 'Extração', 'left', '15%');
+        $col_vendedor   = new TDataGridColumn('vendedor', 'Vendedor', 'left', '15%');
+        $col_nsu        = new TDataGridColumn('nsu', 'NSU', 'center', '8%');
+        $col_poule      = new TDataGridColumn('poule', 'Poule', 'center', '8%');
+        $col_data       = new TDataGridColumn('data_hora', 'Data', 'center', '14%');
+        $col_jogo       = new TDataGridColumn('jogo', 'Jogo', 'left', '18%');
+        $col_apostado   = new TDataGridColumn('valor_palpites', 'Apostado', 'right', '11%');
+        $col_total_apos = new TDataGridColumn('total_sorteio', 'Total Apostado', 'right', '11%');
+
+        $col_nsu->setTransformer(fn($v) => str_pad($v, 6, '0', STR_PAD_LEFT));
+        $col_poule->setTransformer(fn($v) => str_pad($v, 6, '0', STR_PAD_LEFT));
+        $col_data->setTransformer(fn($v) => $v ? date('d/m/Y H:i:s', strtotime($v)) : '');
+
+        $col_jogo->setTransformer(function($v, $object) {
+            $palpites = str_replace(',', ' ', $object->palpites ?? '');
+            return trim(($object->modalidade ?? '') . ' | ' . $palpites);
+        });
 
         $fmt_brl = fn($v) => 'R$ ' . number_format((float)$v, 2, ',', '.');
-        $col_total->setTransformer($fmt_brl);
-        $col_data->setTransformer(fn($v) => $v ? date('d/m/Y H:i', strtotime($v)) : '');
-        $col_nsu->setTransformer(fn($v) => str_pad($v, 6, '0', STR_PAD_LEFT));
-        $col_cancel->setTransformer(function($v) {
-            return $v === 'S'
-                ? "<span class='label label-danger'>Sim</span>"
-                : "<span class='label label-success'>Não</span>";
-        });
-        $col_situacao->setTransformer(function($v) {
-            $map = ['A' => 'Aberto', 'F' => 'Fechado', 'P' => 'Pago'];
-            return $map[$v] ?? $v;
-        });
+        $col_apostado->setTransformer($fmt_brl);
+        $col_total_apos->setTransformer($fmt_brl);
 
-        foreach ([$col_nsu,$col_data,$col_vendedor,$col_extracao,$col_palpites,$col_modal,$col_total,$col_situacao,$col_cancel] as $c) {
+        foreach ([$col_extracao, $col_vendedor, $col_nsu, $col_poule, $col_data, $col_jogo, $col_apostado, $col_total_apos] as $c) {
             $this->datagrid->addColumn($c);
         }
         $this->datagrid->createModel();
 
+        $this->footerTotal = new TElement('div');
+        $this->footerTotal->style = 'text-align:right;padding:8px;font-weight:bold;';
+
         $panel = new TPanelGroup();
         $panel->add($this->datagrid)->style = 'overflow-x:auto';
+        $panel->addFooter($this->footerTotal);
+        $this->panel = $panel;
 
         $container = new TVBox;
         $container->style = 'width: 100%';
@@ -109,6 +109,7 @@ class BilheteList extends TPage
         $data = $this->form->getData();
         TSession::setValue(__CLASS__.'_filter_data', $data);
         TSession::setValue(__CLASS__.'_filter', (array) $data);
+        $this->form->setData($data);
         $this->onReload($param);
     }
 
@@ -118,52 +119,66 @@ class BilheteList extends TPage
         TSession::setValue(__CLASS__.'_filter', null);
         $this->form->clear();
         $this->datagrid->clear();
+        $this->footerTotal->clearChildren();
+
+        $data = (object) [
+            'data_ini'    => date('Y-m-d'),
+            'area_id'     => '',
+            'extracao_id' => ''
+        ];
+        $this->form->setData($data);
     }
 
     public function onReload($param = [])
     {
         $filter = TSession::getValue(__CLASS__.'_filter');
-        if (empty($filter)) return;
+        if (empty($filter)) {
+            $filter = ['data_ini' => date('Y-m-d')];
+        }
 
         try {
             TTransaction::open('permission');
             $conn = TTransaction::get();
 
-            $where  = [];
-            $params = [];
+            $data_val    = !empty($filter['data_ini']) ? $filter['data_ini'] : date('Y-m-d');
+            $data_inicio = $data_val . ' 00:00:00';
+            $data_fim    = date('Y-m-d 00:00:00', strtotime($data_val . ' +1 day'));
 
-            if (!empty($filter['nsu'])) {
-                $where[] = 'nsu = :nsu';
-                $params[':nsu'] = (int) $filter['nsu'];
-            } else {
-                if (!empty($filter['data_ini'])) {
-                    $where[] = 'DATE(data_hora) >= :data_ini';
-                    $params[':data_ini'] = $filter['data_ini'];
-                }
-                if (!empty($filter['data_fim'])) {
-                    $where[] = 'DATE(data_hora) <= :data_fim';
-                    $params[':data_fim'] = $filter['data_fim'];
-                }
-                if (!empty($filter['area_id'])) {
-                    $where[] = 'area_id = :area_id';
-                    $params[':area_id'] = $filter['area_id'];
-                }
-                if (!empty($filter['extracao_id'])) {
-                    $where[] = 'extracao_id = :extracao_id';
-                    $params[':extracao_id'] = $filter['extracao_id'];
-                }
-                if (!empty($filter['vendedor_id'])) {
-                    $where[] = 'vendedor_id = :vendedor_id';
-                    $params[':vendedor_id'] = $filter['vendedor_id'];
-                }
-                if ($filter['cancelado'] !== '') {
-                    $where[] = 'cancelado = :cancelado';
-                    $params[':cancelado'] = $filter['cancelado'];
-                }
+            $where  = [
+                'vmjb.data_hora >= :data_inicio',
+                'vmjb.data_hora < :data_fim',
+                "vmjb.situacao = 'ATIVO'"
+            ];
+            $params = [
+                ':data_inicio' => $data_inicio,
+                ':data_fim'    => $data_fim,
+            ];
+
+            if (!empty($filter['area_id'])) {
+                $where[] = 'vmjb.area_id = :area_id';
+                $params[':area_id'] = (int) $filter['area_id'];
             }
 
-            $cond = $where ? 'WHERE ' . implode(' AND ', $where) : '';
-            $sql  = "SELECT * FROM vw_vendajb {$cond} ORDER BY data_hora DESC LIMIT 500";
+            if (!empty($filter['extracao_id'])) {
+                $where[] = 'vmjb.extracao_id = :extracao_id';
+                $params[':extracao_id'] = (int) $filter['extracao_id'];
+            }
+
+            $sql = "
+                SELECT
+                    vmjb.extracao,
+                    vmjb.vendedor,
+                    vmjb.nsu,
+                    vmjb.poule,
+                    vmjb.data_hora,
+                    vmjb.valor_palpites,
+                    vmjb.total_sorteio,
+                    vmjb.modalidade,
+                    vmjb.palpites
+                FROM vw_vendajb vmjb
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY vmjb.nsu DESC
+            ";
 
             $stmt = $conn->prepare($sql);
             $stmt->execute($params);
@@ -171,16 +186,37 @@ class BilheteList extends TPage
             TTransaction::close();
 
             $this->datagrid->clear();
+            $soma_apostado = 0;
+            $soma_total    = 0;
+
             foreach ($rows as $row) {
                 $this->datagrid->addItem($row);
+                $soma_apostado += (float)$row->valor_palpites;
+                $soma_total    += (float)$row->total_sorteio;
             }
 
+            $fmt = fn($v) => 'R$ ' . number_format($v, 2, ',', '.');
+            $this->footerTotal->clearChildren();
+            $this->footerTotal->add("Total Apostado: {$fmt($soma_apostado)} | Total Geral: {$fmt($soma_total)}");
+
+            $this->loaded = true;
+
             if (empty($rows)) {
-                new TMessage('info', 'Nenhum bilhete encontrado!');
+                new TMessage('info', 'Não existe resultado para esta data!');
             }
+
         } catch (Exception $e) {
             TTransaction::rollback();
             new TMessage('error', $e->getMessage());
         }
     }
+
+    public function show()
+    {
+        if (!$this->loaded && (!isset($_GET['method']) || !in_array($_GET['method'], ['onReload', 'onSearch', 'onClear']))) {
+            $this->onReload();
+        }
+        parent::show();
+    }
 }
+
