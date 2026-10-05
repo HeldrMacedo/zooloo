@@ -1,3 +1,5 @@
+> **Nota (2026-10-05):** DDL parcial (só `system_users` e `cad_vendedor`). Não é o schema completo — ver `docs/references/schema-banco.md`.
+
 -- public.system_users definição
 
 -- Drop table

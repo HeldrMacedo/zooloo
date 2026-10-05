@@ -102,6 +102,8 @@ Trigger DB `trg_mv_cad_extracao_cria_sorteios` compartilhada (schema).
 
 #### 1.6 Terminal — Não implementado
 
+> **Atualização (2026-10-05):** `TerminalForm`/`TerminalList` foram adicionados (commit 22d80b1) e estão no menu. Revalidar os campos abaixo contra o allsystem.
+
 Campos allsystem: `serial`, `tipo` (PC/SMART/POS/MOBILE), `area`, `vendedor`, `multiploUsuario`, `ativo`.  
 Zooloo: apenas model (sem `area_id`).
 
@@ -298,7 +300,7 @@ Campos no model (`cfg_parametros`): nome_banca, cnpj, telefone, cidade, estado, 
 - Ao deixar um Gerente inativo, também deixar o usuário do sistema inativo (parcial na list).
 - `ResultadoForm`: verificar o horário limite da extração antes de permitir salvar (parcial; falta data+hora completa).
 
-Arquivos: `todo`, `CLAUDE.md`.
+Acompanhados em `docs/exec-plans/tech-debt.md`.
 
 ---
 

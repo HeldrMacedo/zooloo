@@ -1,6 +1,13 @@
 {
   "scripts": {
-    "test": "php tests/run.php"
+    "lint": "php scripts/lint.php",
+    "test": "php tests/run.php",
+    "docs:check": "php scripts/check-docs.php",
+    "check": [
+      "@lint",
+      "@test",
+      "@docs:check"
+    ]
   },
   "require": {
     "phpmailer/phpmailer": "^6.0",

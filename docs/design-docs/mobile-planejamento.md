@@ -1,3 +1,5 @@
+> **Nota (2026-10-05):** documento de planejamento de 2026-04. O app foi feito em **Expo** (não RN bare) e a lista de endpoints abaixo está superada por `docs/references/api-contract.md`. Mantido como histórico.
+
 # Planejamento: App Cambista — Zooloo Mobile
 
 ## 1. Visão Geral e Decisões de Stack

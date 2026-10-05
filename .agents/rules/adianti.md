@@ -7,6 +7,9 @@ trigger: model_decision
 
 Sempre que o usuário solicitar a criação, refatoração, manutenção ou dúvida sobre o **Adianti Framework** (PHP):
 
+0. **Versão do projeto: Adianti 8.1** (`lib/VERSION`). As fontes 8.4 abaixo são referência de
+   padrões; antes de usar uma classe ou método, confirme que existe em `lib/adianti/` deste repo.
+
 1. **Fontes de Consulta Obrigatórias**:
    - **Exemplos Atualizados (Versão 8.4)**: `/home/helder/Desenvolvimento/Adianti8.4/tutor`
    - **Core do Framework (Versão 8.4)**: `/home/helder/Desenvolvimento/Adianti8.4/framework`
