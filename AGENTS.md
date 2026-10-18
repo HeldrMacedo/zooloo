@@ -28,6 +28,7 @@ Detalhes: [docs/design-docs/golden-principles.md](docs/design-docs/golden-princi
 | Onde achar cada coisa no legado Java | [docs/references/legacy-allsystem.md](docs/references/legacy-allsystem.md) |
 | Binding de terminal/serial no login mobile | [docs/design-docs/terminal-binding.md](docs/design-docs/terminal-binding.md) |
 | Decisões de arquitetura (ADRs) | [docs/design-docs/adr/](docs/design-docs/adr/) |
+| Fluxo de trabalho com IA nos dois repos (planos, contrato, docs) | [docs/guia-trabalho-com-ia.md](docs/guia-trabalho-com-ia.md) |
 | O que está em andamento / feito | [docs/exec-plans/README.md](docs/exec-plans/README.md) |
 | Dívida técnica e TODOs | [docs/exec-plans/tech-debt.md](docs/exec-plans/tech-debt.md) |
 | Nota de qualidade por área | [docs/QUALITY_SCORE.md](docs/QUALITY_SCORE.md) |
